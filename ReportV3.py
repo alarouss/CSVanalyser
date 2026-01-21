@@ -4,7 +4,7 @@
 
 
 import json, sys, textwrap
-from lib.common import strip_ansi, ustr, pad, trim_lot
+from Lib.common import strip_ansi, ustr, pad, trim_lot
 
 KEY_WIDTH   = 24
 VALUE_WIDTH = 60
