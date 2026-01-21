@@ -4,8 +4,6 @@
 import sys, os
 sys.path.append("..")
 
-from Lib.store import load_store, save_store, build_index
-
 TMP="test_store.json"
 
 def test_store_cycle():
