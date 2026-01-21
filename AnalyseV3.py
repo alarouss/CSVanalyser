@@ -10,6 +10,7 @@ import json
 import time
 import os
 import tempfile
+from Lib.store import load_store, save_store, build_index
 
 STORE_FILE = "connexions_store_v2.json"   # on garde le store identique (même fichier)
 DEBUG = False
@@ -336,23 +337,6 @@ def build_status(valid, scan, scan_dr, dirty, dirty_reason, err_type, err_detail
         st["OEMErrorType"] = oem_err_type
         st["OEMErrorDetail"] = oem_err_detail
     return st
-
-# ------------------------------------------------
-def load_store():
-    if not os.path.isfile(STORE_FILE):
-        return {"objects": []}
-    return json.loads(open(STORE_FILE, "rb").read().decode("utf-8"))
-
-def save_store(store):
-    open(STORE_FILE, "wb").write(
-        json.dumps(store, indent=2, ensure_ascii=False).encode("utf-8")
-    )
-
-def build_index(store):
-    idx = {}
-    for o in store.get("objects", []):
-        idx[o.get("id")] = o
-    return idx
 
 # ------------------------------------------------
 # OEM conf
