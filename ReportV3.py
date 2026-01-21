@@ -235,8 +235,11 @@ if __name__=="__main__":
     if len(sys.argv)<2:
         print_help(); sys.exit(0)
 
-    store_file=sys.argv[1]
-    args=sys.argv[2:]
+    store_file = STORE_FILE
+    if not os.path.isfile(store_file):
+    print "Store JSON file not found:", store_file
+    sys.exit(1)
+    args = sys.argv[1:]
 
     if "-help" in args or "-h" in args:
         print_help(); sys.exit(0)
