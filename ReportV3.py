@@ -10,16 +10,18 @@ import re
 KEY_WIDTH = 24
 VALUE_WIDTH = 60
 
-RED = u"\033[31m"
-GREEN = u"\033[32m"
+RED    = u"\033[31m"
+GREEN  = u"\033[32m"
 YELLOW = u"\033[33m"
-RESET = u"\033[0m"
+RESET  = u"\033[0m"
 
 ANSI_RE = re.compile(r'\x1b\[[0-9;]*m')
+
 
 # -----------------------
 def strip_ansi(s):
     return ANSI_RE.sub('', s or "")
+
 
 def ustr(v):
     if v is None:
@@ -31,30 +33,34 @@ def ustr(v):
     except:
         return unicode(str(v), "utf-8", "ignore")
 
+
 def pad(val, width):
     txt = ustr(val)
     visible = strip_ansi(txt)
     return txt + u" " * max(0, width - len(visible))
 
+
 def trim_lot(val):
     txt = ustr(val)
     return txt[:-7] if len(txt) > 7 else txt
+
 
 # -----------------------
 def print_help():
     print u"""ReportV3.py - JDBC Report V3 (V2 + OEM)
 
 Usage:
- python ReportV3.py store.json
- python ReportV3.py store.json -summary
- python ReportV3.py store.json -summary ?
- python ReportV3.py store.json -summary Database=?
- python ReportV3.py store.json -summary Database=VALUE
- python ReportV3.py store.json -summary Application=?
- python ReportV3.py store.json -summary Application=VALUE
- python ReportV3.py store.json id=N [-debug]
- python ReportV3.py store.json -help
+  python ReportV3.py store.json
+  python ReportV3.py store.json -summary
+  python ReportV3.py store.json -summary ?
+  python ReportV3.py store.json -summary Database=?
+  python ReportV3.py store.json -summary Database=VALUE
+  python ReportV3.py store.json -summary Application=?
+  python ReportV3.py store.json -summary Application=VALUE
+  python ReportV3.py store.json id=N [-debug]
+  python ReportV3.py store.json -help
 """.encode("utf-8")
+
 
 # -----------------------
 def format_global_status(val):
@@ -69,12 +75,16 @@ def format_global_status(val):
 
     return YELLOW + u"[--] " + txt + RESET
 
+
 # -----------------------
 def color_value(val, rule):
+
     if rule == "valid":
         return GREEN + u"YES" + RESET if val else RED + u"NO" + RESET
+
     if rule == "dirty":
         return RED + u"YES" + RESET if val else GREEN + u"NO" + RESET
+
     if rule == "scan":
         if val == "VALIDE":
             return GREEN + ustr(val) + RESET
@@ -82,69 +92,89 @@ def color_value(val, rule):
             return RED + ustr(val) + RESET
         if val == "NOT_APPLICABLE":
             return YELLOW + ustr(val) + RESET
+
     if rule == "oem":
         if val in ("ERROR", "KO", "FAIL"):
             return YELLOW + ustr(val) + RESET
+
     return ustr(val)
+
 
 # -----------------------
 def print_section(title):
     print (u"\n" + ustr(title)).encode("utf-8")
 
+
 # -----------------------
 def print_table(rows):
-    header = u"    %-*s | %s" % (KEY_WIDTH, u"Key", u"Value")
+
+    header = u" %-*s | %s" % (KEY_WIDTH, u"Key", u"Value")
     print header.encode("utf-8")
-    print (u"    " + u"-" * KEY_WIDTH + u"-+-" + u"-" * VALUE_WIDTH).encode("utf-8")
+
+    print (u" " + u"-" * KEY_WIDTH + u"-+-" + u"-" * VALUE_WIDTH).encode("utf-8")
 
     for k, v in rows:
         txt = ustr(v)
         wrapped = textwrap.wrap(txt, VALUE_WIDTH) or [u""]
-        print (u"    %-*s | %s" % (KEY_WIDTH, ustr(k), wrapped[0])).encode("utf-8")
+        print (u" %-*s | %s" % (KEY_WIDTH, ustr(k), wrapped[0])).encode("utf-8")
+
         for l in wrapped[1:]:
-            print (u"    %-*s | %s" % (KEY_WIDTH, u"", l)).encode("utf-8")
+            print (u" %-*s | %s" % (KEY_WIDTH, u"", l)).encode("utf-8")
+
 
 # ===================== SUMMARY FILTER SUPPORT =====================
 
 FILTER_FIELDS = {
-    "Database": lambda o: ustr(o.get("RawSource", {}).get("Databases", "")),
+    "Database":    lambda o: ustr(o.get("RawSource", {}).get("Databases", "")),
     "Application": lambda o: ustr(o.get("RawSource", {}).get("Application", "")),
-    "Lot": lambda o: trim_lot(o.get("RawSource", {}).get("Lot", "")),
-    "DR": lambda o: ustr(o.get("RawSource", {}).get("DR O/N") or o.get("RawSource", {}).get("DR", "")),
-    "Statut": lambda o: strip_ansi(format_global_status(o.get("RawSource", {}).get("Statut Global"))),
-    "Valid": lambda o: "YES" if o.get("Status", {}).get("ValidSyntax") else "NO",
-    "Scan": lambda o: ustr(o.get("Status", {}).get("ScanCompare", "")),
-    "ScanDR": lambda o: ustr(o.get("Status", {}).get("ScanCompareDR", "")),
-    "Dirty": lambda o: "YES" if o.get("Status", {}).get("Dirty") else "NO",
+    "Lot":         lambda o: trim_lot(o.get("RawSource", {}).get("Lot", "")),
+    "DR":          lambda o: ustr(o.get("RawSource", {}).get("DR O/N") or o.get("RawSource", {}).get("DR", "")),
+    "Statut":      lambda o: strip_ansi(format_global_status(o.get("RawSource", {}).get("Statut Global"))),
+    "Valid":       lambda o: "YES" if o.get("Status", {}).get("ValidSyntax") else "NO",
+    "Scan":        lambda o: ustr(o.get("Status", {}).get("ScanCompare", "")),
+    "ScanDR":      lambda o: ustr(o.get("Status", {}).get("ScanCompareDR", "")),
+    "Dirty":       lambda o: "YES" if o.get("Status", {}).get("Dirty") else "NO",
+
     "OEMHost": lambda o: ustr(o.get("Network", {}).get("OEM", {}).get("host", "")),
     "OEMScan": lambda o: ustr(o.get("Network", {}).get("OEM", {}).get("scan", "")),
 }
 
+
 # -----------------------
 def print_summary(store):
+
     objs = store.get("objects", [])
+
     print_section("SUMMARY - JDBC ANALYSIS")
 
     headers = [
-        ("ID", 4), ("Database", 9), ("Application", 18), ("Lot", 10),
-        ("DR", 3), ("Statut Global", 28),
-        ("Valid Syntax", 12), ("Scan Compare", 15),
-        ("Scan Compare DR", 18), ("Dirty", 5),
-        ("OEM Host", 18), ("OEM Scan", 16)
+        ("ID", 4),
+        ("Database", 9),
+        ("Application", 18),
+        ("Lot", 10),
+        ("DR", 3),
+        ("Statut Global", 28),
+        ("Valid Syntax", 12),
+        ("Scan Compare", 15),
+        ("Scan Compare DR", 18),
+        ("Dirty", 5),
+        ("OEM Host", 18),
+        ("OEM Scan", 16),
     ]
 
-    line = u"    "
-    sep = u"    "
+    line = u" "
+    sep  = u" "
+
     for h, w in headers:
         line += pad(h, w) + u" | "
-        sep += u"-" * w + u"-+-"
+        sep  += u"-" * w + u"-+-"
 
     print line[:-3].encode("utf-8")
     print sep[:-3].encode("utf-8")
 
     for o in objs:
-        rs = o.get("RawSource", {})
-        st = o.get("Status", {})
+        rs  = o.get("RawSource", {})
+        st  = o.get("Status", {})
         net = o.get("Network", {})
         oem = net.get("OEM", {})
 
@@ -160,51 +190,63 @@ def print_summary(store):
             color_value(st.get("ScanCompareDR"), "scan"),
             color_value(st.get("Dirty"), "dirty"),
             oem.get("host", ""),
-            oem.get("scan", "")
+            oem.get("scan", ""),
         ]
 
-        line = u"    "
+        line = u" "
         for (val, (h, w)) in zip(row, headers):
             line += pad(val, w) + u" | "
+
         print line[:-3].encode("utf-8")
+
 
 # -----------------------
 def show_network_block(title, block, include_port=False):
+
     print_section(title)
+
     rows = [
         ("Host", block.get("host")),
         ("CNAME", block.get("cname")),
         ("SCAN", block.get("scan")),
     ]
+
     if include_port:
         rows.insert(1, ("Port", block.get("port")))
+
     print_table(rows)
+
 
 # -----------------------
 def show_object(o, debug=False):
-    rs = o.get("RawSource", {})
-    st = o.get("Status", {})
+
+    rs  = o.get("RawSource", {})
+    it  = o.get("Interpreted", {})
+    st  = o.get("Status", {})
     net = o.get("Network", {})
 
     print (u"\nID = %s — Database: %s" %
            (o.get("id", ""), ustr(rs.get("Databases", "")))).encode("utf-8")
 
     print_section("METADATA")
+
     print_table([
         ("Application", rs.get("Application")),
         ("Lot", rs.get("Lot")),
         ("Databases", rs.get("Databases")),
         ("DR", rs.get("DR O/N") or rs.get("DR")),
         ("Statut Global", format_global_status(rs.get("Statut Global"))),
-        ("Acces", rs.get("Acces"))
+        ("Acces", rs.get("Acces")),
     ])
 
     show_network_block("CURRENT JDBC", net.get("Current", {}))
     show_network_block("NEW JDBC", net.get("New", {}))
     show_network_block("NEW JDBC DR", net.get("NewDR", {}))
+
     show_network_block("OEM CONN", net.get("OEM", {}), include_port=True)
 
     print_section("STATUS")
+
     rows_status = [
         ("Valid Syntax", color_value(st.get("ValidSyntax"), "valid")),
         ("Scan Compare", color_value(st.get("ScanCompare"), "scan")),
@@ -230,10 +272,10 @@ def show_object(o, debug=False):
     print_table(rows_status)
 
     if debug:
-        if (st.get("ErrorType") or st.get("ErrorDetail") or
-            st.get("OEMErrorType") or st.get("OEMErrorDetail")):
+        if st.get("ErrorType") or st.get("ErrorDetail") or st.get("OEMErrorType") or st.get("OEMErrorDetail"):
 
             print_section("ERROR DETAIL (DEBUG)")
+
             print_table([
                 ("Error Type", st.get("ErrorType")),
                 ("Error Detail", st.get("ErrorDetail")),
@@ -242,10 +284,13 @@ def show_object(o, debug=False):
             ])
 
         print_section("RAWSOURCE (DEBUG)")
+
         raw_rows = []
         for k in sorted(rs.keys()):
             raw_rows.append((k, rs.get(k)))
+
         print_table(raw_rows)
+
 
 # ===================== MAIN =====================
 
@@ -271,4 +316,51 @@ if __name__ == "__main__":
 
         for a in args:
             if a == "?":
-                print "\nFiltre
+                print "\nFiltres disponibles :"
+                for k in sorted(FILTER_FIELDS.keys()):
+                    print " ", k
+                sys.exit(0)
+
+            if "=" in a:
+                k, v = a.split("=", 1)
+                if k in FILTER_FIELDS:
+
+                    if v == "?":
+                        vals = sorted(set(FILTER_FIELDS[k](o) for o in objs))
+                        print "\nValeurs disponibles pour", k, ":"
+                        for x in vals:
+                            print " ", x
+                        sys.exit(0)
+
+                    else:
+                        vv = ustr(v)
+                        objs = [o for o in objs if ustr(FILTER_FIELDS[k](o)) == vv]
+                        break
+
+        print_summary({"objects": objs})
+        sys.exit(0)
+
+    option = None
+    for a in args:
+        if a.startswith("id="):
+            option = a
+
+    if not option:
+        print_summary(store)
+        sys.exit(0)
+
+    target = int(option.split("=")[1])
+    found = None
+
+    for o in objs:
+        if o.get("id") == target:
+            found = o
+            break
+
+    if not found:
+        print "ID non trouvé:", target
+        sys.exit(0)
+
+    show_object(found, DEBUG)
+
+    print "\nReportV3 terminé."
