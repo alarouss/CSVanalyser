@@ -47,7 +47,7 @@ Options:
 
 OEM:
  - Le script lit oem.conf (dans le répertoire courant) et attend la variable:
-     OEM_CONN=...   (chaine pour sqlplus)
+     N=...   (chaine pour sqlplus)
  - OEM est stocké dans JSON sous Network/OEM : host,cname,scan (+ port optionnel)
 """
 
@@ -342,17 +342,27 @@ def build_status(valid, scan, scan_dr, dirty, dirty_reason, err_type, err_detail
 # OEM conf
 def load_oem_conf():
     """
-    Lit OEM_CONF_FILE et retourne dict des variables.
-    Format supporté:
-      KEY=VALUE
-    Ignore lignes vides et lignes commençant par # ou ;
+    Cherche oem.conf dans :
+      - répertoire courant
+      - Data/
     """
-    if not os.path.isfile(OEM_CONF_FILE):
-        return None, "OEM_CONF_MISSING", "Missing %s in current directory" % OEM_CONF_FILE
+    paths = [
+        OEM_CONF_FILE,
+        os.path.join("Data", OEM_CONF_FILE)
+    ]
+
+    conf_path = None
+    for p in paths:
+        if os.path.isfile(p):
+            conf_path = p
+            break
+
+    if not conf_path:
+        return None, "OEM_CONF_MISSING", "Missing %s in current directory or Data/" % OEM_CONF_FILE
 
     d = {}
     try:
-        for line in open(OEM_CONF_FILE, "rb").read().splitlines():
+        for line in open(conf_path, "rb").read().splitlines():
             try:
                 s = line.decode("utf-8", "ignore")
             except:
@@ -369,9 +379,12 @@ def load_oem_conf():
             v = v.strip()
             if k:
                 d[k] = v
+
         if "OEM_CONN" not in d or not d.get("OEM_CONN"):
-            return None, "OEM_CONF_INVALID", "OEM_CONN is missing or empty in %s" % OEM_CONF_FILE
+            return None, "OEM_CONF_INVALID", "OEM_CONN is missing or empty in %s" % conf_path
+
         return d, None, None
+
     except Exception as e:
         return None, "OEM_CONF_ERROR", str(e)
 
