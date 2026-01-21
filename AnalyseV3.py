@@ -454,14 +454,14 @@ def build_object_v3(row, obj_id, store_index, force_update, total_csv, oem_conn)
         }
 
     # CURRENT
-    net_cur, ecur, dcur = compute_network_block(net["Current"]["host"], step, obj_id, total_csv)
+    net_cur, ecur, dcur = compute_network_block(net["Current"]["host"],  step, obj_id, total_csv)
     net["Current"] = net_cur
     if ecur and (not err_type):
         err_type = ecur
         err_detail = dcur
 
     # NEW
-    net_new, enew, dnew = compute_network_block(net["New"]["host"], "NEW", obj_id, total_csv)
+    net_new, enew, dnew = compute_network_block(net["New"]["host"], step, obj_id, total_csv)
     net["New"] = net_new
     if enew and (not err_type):
         err_type = enew
@@ -494,7 +494,7 @@ def build_object_v3(row, obj_id, store_index, force_update, total_csv, oem_conn)
                 err_type = "SYNTAX_ERROR_DR"
                 err_detail = "Parsing failed for DR comparison (CurrentJdbc or NewJdbcDR)"
         else:
-            net_dr, edr, ddr = compute_network_block(net["NewDR"]["host"], "NEWDR", obj_id, total_csv)
+            net_dr, edr, ddr = compute_network_block(net["NewDR"]["host"], step, obj_id, total_csv)
             net["NewDR"] = net_dr
             if edr:
                 scan_dr_status = "ERROR"
@@ -544,7 +544,7 @@ def build_object_v3(row, obj_id, store_index, force_update, total_csv, oem_conn)
             net["OEM"]["port"] = oem_port
 
             # réseau OEM : cname/scan
-            net_oem, eo2, do2 = compute_network_block(oem_host, "OEM", obj_id, total_csv)
+            net_oem, eo2, do2 = compute_network_block(oem_host, step, obj_id, total_csv)
             # merge en gardant port
             net["OEM"]["cname"] = net_oem.get("cname")
             net["OEM"]["scan"] = net_oem.get("scan")
