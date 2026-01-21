@@ -634,7 +634,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Load store / index
-    store = load_store()
+    store = load_store(STORE_FILE)
     store_index = build_index(store)
 
     # Rebuild objects list: keep existing not in ids, update ids
@@ -659,6 +659,6 @@ if __name__ == "__main__":
     sys.stdout.write("\n")
 
     store["objects"] = keep + objects
-    save_store(store)
+    save_store(STORE_FILE, store)
 
     print "\nAnalyseV3 terminé. Objets générés:", len(objects)
