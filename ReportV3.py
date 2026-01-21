@@ -5,6 +5,12 @@
 
 import json, sys, textwrap, re
 from Lib.common import strip_ansi, ustr, pad, trim_lot
+from Lib.config import load_config
+
+conf = load_config("Data/app.conf")
+STORE_FILE = conf.get("STORE_JSON")
+
+store_file = STORE_FILE
 
 KEY_WIDTH   = 24
 VALUE_WIDTH = 60
