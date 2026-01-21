@@ -1,12 +1,15 @@
-# Lib/store.py
 # -*- coding: utf-8 -*-
+# Lib/store.py
 
-import os, json
+import os
+import json
 
 def load_store(store_file):
     if not os.path.isfile(store_file):
         return {"objects": []}
-    return json.loads(open(store_file, "rb").read().decode("utf-8"))
+
+    data = open(store_file, "rb").read().decode("utf-8")
+    return json.loads(data)
 
 def save_store(store_file, store):
     open(store_file, "wb").write(
