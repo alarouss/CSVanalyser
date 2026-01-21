@@ -106,8 +106,7 @@ def print_summary(store):
         ("ID",4),("Database",9),("Application",18),("Lot",10),
         ("DR",3),("Statut Global",28),
         ("Valid Syntax",12),("Scan Compare",15),
-        ("Scan Compare DR",18),("Dirty",5),
-        ("OEM Host",18),("OEM Scan",16)
+        ("Scan Compare DR",18),("Dirty",5)
     ]
 
     line = u"    "
@@ -121,8 +120,7 @@ def print_summary(store):
     for o in objs:
         rs = o.get("RawSource",{})
         st = o.get("Status",{})
-        net = o.get("Network",{})
-        oem = net.get("OEM",{})
+        
 
         row = [
             o.get("id",""),
@@ -134,9 +132,7 @@ def print_summary(store):
             color_value(st.get("ValidSyntax"),"valid"),
             color_value(st.get("ScanCompare"),"scan"),
             color_value(st.get("ScanCompareDR"),"scan"),
-            color_value(st.get("Dirty"),"dirty"),
-            oem.get("host",""),
-            oem.get("scan","")
+            color_value(st.get("Dirty"),"dirty")
         ]
 
         line=u"    "
@@ -162,7 +158,6 @@ def show_object(o, debug=False):
     rs  = o.get("RawSource",{})
     it  = o.get("Interpreted",{})
     st  = o.get("Status",{})
-    net = o.get("Network",{})
 
     print (u"\nID = %s — Database: %s" % (o.get("id",""), ustr(rs.get("Databases","")))).encode("utf-8")
 
