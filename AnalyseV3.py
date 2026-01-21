@@ -766,7 +766,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # ------------------------------------------------
-    store = load_store()
+    store = load_store(STORE_FILE)
     store_index = build_index(store)
 
     existing = store.get("objects", [])
