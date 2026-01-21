@@ -12,6 +12,10 @@ import time
 import os
 import tempfile
 
+from Lib.common import ustr
+from Lib.config import load_main_conf
+from Lib.store import load_store, save_store, build_index
+
 CONF_FILE = os.path.join("Data", "config.conf")
 DEBUG = False
 
@@ -29,49 +33,6 @@ RAW_COLUMNS = [
     "Acces",
     "Cnames DR"
 ]
-
-def load_main_conf():
-    """
-    Lit Data/config.conf et retourne dict:
-      SOURCE_CSV=...
-      SOURCE_JSON=...
-      OEM_CONF_FILE=...
-    """
-    if not os.path.isfile(CONF_FILE):
-        return None, "CONF_MISSING", "Missing %s" % CONF_FILE
-
-    d = {}
-    try:
-        for line in open(CONF_FILE, "rb").read().splitlines():
-            try:
-                s = line.decode("utf-8", "ignore")
-            except:
-                s = line
-            s = s.strip()
-            if not s:
-                continue
-            if s.startswith("#") or s.startswith(";"):
-                continue
-            if "=" not in s:
-                continue
-            k, v = s.split("=", 1)
-            k = k.strip()
-            v = v.strip()
-            if k:
-                d[k] = v
-
-        # validations minimales
-        if not d.get("SOURCE_CSV"):
-            return None, "CONF_INVALID", "SOURCE_CSV is missing in %s" % CONF_FILE
-        if not d.get("SOURCE_JSON"):
-            return None, "CONF_INVALID", "SOURCE_JSON is missing in %s" % CONF_FILE
-        if not d.get("OEM_CONF_FILE"):
-            return None, "CONF_INVALID", "OEM_CONF_FILE is missing in %s" % CONF_FILE
-
-        return d, None, None
-    except Exception as e:
-        return None, "CONF_ERROR", str(e)
-
 # ------------------------------------------------
 def print_help():
     print """AnalyseV3.py - Analyse JDBC Oracle V3 (V2 + OEM)
@@ -105,22 +66,6 @@ def debug_print(msg):
 
 
 # ------------------------------------------------
-def ustr(v):
-    if v is None:
-        return u""
-    if isinstance(v, unicode):
-        return v
-    if isinstance(v, str):
-        try:
-            return v.decode("latin1", "ignore")
-        except:
-            return unicode(v, "latin1", "ignore")
-    try:
-        return unicode(str(v), "latin1", "ignore")
-    except:
-        return u""
-
-
 def normalize_key(k):
     return ustr(k).replace(u'\ufeff', u'').strip()
 
@@ -388,25 +333,6 @@ def build_status(valid, scan, scan_dr, dirty, dirty_reason,
 
     return st
 # ------------------------------------------------
-def load_store():
-    if not os.path.isfile(STORE_FILE):
-        return {"objects": []}
-    return json.loads(open(STORE_FILE, "rb").read().decode("utf-8"))
-
-
-def save_store(store):
-    open(STORE_FILE, "wb").write(
-        json.dumps(store, indent=2, ensure_ascii=False).encode("utf-8")
-    )
-
-
-def build_index(store):
-    idx = {}
-    for o in store.get("objects", []):
-        idx[o.get("id")] = o
-    return idx
-
-
 # ------------------------------------------------
 def load_oem_conf():
     """
