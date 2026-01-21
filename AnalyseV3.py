@@ -454,7 +454,9 @@ def build_object_v3(row, obj_id, store_index, force_update, total_csv, oem_conn)
         }
 
     # CURRENT
-    net_cur, ecur, dcur = compute_network_block(net["Current"]["host"], "CURRENT", obj_id, total_csv, show_progress)
+    net_cur, ecur, dcur = compute_network_block(
+        net["Current"]["host"], "CURRENT", obj_id, total_csv, show_progress
+    )
     net["Current"] = net_cur
     if ecur and (not err_type):
         err_type = ecur
