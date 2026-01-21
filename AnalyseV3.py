@@ -15,7 +15,11 @@ from Lib.jdbc import (
     JdbcChaine, clean_jdbc, parse_simple_jdbc, parse_sqlnet_jdbc,
     parse_jdbc, extract_dr_hosts, build_interpreted, build_raw_source
 )
-
+from Lib.network import (
+    resolve_cname, resolve_scan_address,
+    normalize_scan_name, compare_scans,
+    compute_network_block
+)
 STORE_FILE = "Data/connexions_store_v3.json"   # on garde le store identique (même fichier)
 DEBUG = False
 
@@ -448,7 +452,7 @@ def build_object_v3(row, obj_id, store_index, force_update, total_csv, oem_conn)
         }
 
     # CURRENT
-    net_cur, ecur, dcur = compute_network_block(net["Current"]["host"], "CURRENT", obj_id, total_csv)
+    net_cur, ecur, dcur = compute_network_block(net["Current"]["host"], "CURRENT", obj_id, total_csv, show_progress)
     net["Current"] = net_cur
     if ecur and (not err_type):
         err_type = ecur
