@@ -20,6 +20,8 @@ from Lib.network import (
     normalize_scan_name, compare_scans,
     compute_network_block
 )
+from Lib.config import load_config
+
 STORE_FILE = "Data/connexions_store_v3.json"   # on garde le store identique (même fichier)
 DEBUG = False
 
@@ -591,12 +593,17 @@ def parse_ids(option, max_id):
 
 # ------------------------------------------------
 if __name__ == "__main__":
+    conf = load_config("Data/app.conf")
+
+    CSV_FILE   = conf.get("CSV_INPUT")
+    STORE_FILE = conf.get("STORE_JSON")
+    OEM_CONF_FILE = conf.get("OEM_CONF")
 
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help", "-help"):
         print_help()
         sys.exit(0)
 
-    fichier = sys.argv[1]
+    fichier = CSV_FILE
     if len(sys.argv) < 3:
         print_help()
         sys.exit(1)
