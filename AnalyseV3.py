@@ -609,9 +609,12 @@ if __name__ == "__main__":
     if len(sys.argv) < 3:
         print_help()
         sys.exit(1)
-
-    option = sys.argv[2]
-    args = [a.lower() for a in sys.argv[3:]]
+    if not os.path.isfile(fichier):
+        print "CSV file not found:", fichier
+        sys.exit(1)
+        
+    option = sys.argv[1]
+    args = [a.lower() for a in sys.argv[2:]]
 
     DEBUG = ("-debug" in args)
     force_update = ("-force" in args) or ("-update" in args)
