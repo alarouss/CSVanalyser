@@ -13,9 +13,8 @@ import os
 import tempfile
 
 STORE_FILE = os.path.join("Data", "connexions_store_v3.json")
+OEM_CONF_FILE = os.path.join("Data", "oem.conf")
 DEBUG = False
-
-OEM_CONF_FILE = "oem.conf"
 
 RAW_COLUMNS = [
     "Statut Global",
