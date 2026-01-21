@@ -12,7 +12,7 @@ import time
 import os
 import tempfile
 
-CONF_FILE = os.path.join("Data", "config.conf"))
+CONF_FILE = os.path.join("Data", "config.conf")
 DEBUG = False
 
 RAW_COLUMNS = [
