@@ -1,23 +1,20 @@
-# tests/test_store.py
-# Python 2.6 compatible
+# Lib/store.py
+# -*- coding: utf-8 -*-
 
-import sys, os
-sys.path.append("..")
+import os, json
 
-TMP="test_store.json"
+def load_store(store_file):
+    if not os.path.isfile(store_file):
+        return {"objects": []}
+    return json.loads(open(store_file, "rb").read().decode("utf-8"))
 
-def test_store_cycle():
-    data={"objects":[{"id":1},{"id":2}]}
-    save_store(TMP,data)
+def save_store(store_file, store):
+    open(store_file, "wb").write(
+        json.dumps(store, indent=2, ensure_ascii=False).encode("utf-8")
+    )
 
-    d=load_store(TMP)
-    assert len(d["objects"])==2
-
-    idx=build_index(d)
-    assert idx[1]["id"]==1
-
-    os.remove(TMP)
-
-if __name__=="__main__":
-    test_store_cycle()
-    print "OK store.py"
+def build_index(store):
+    idx = {}
+    for o in store.get("objects", []):
+        idx[o.get("id")] = o
+    return idx
