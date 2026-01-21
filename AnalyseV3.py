@@ -11,6 +11,10 @@ import time
 import os
 import tempfile
 from Lib.store import load_store, save_store, build_index
+from Lib.jdbc import (
+    JdbcChaine, clean_jdbc, parse_simple_jdbc, parse_sqlnet_jdbc,
+    parse_jdbc, extract_dr_hosts, build_interpreted, build_raw_source
+)
 
 STORE_FILE = "Data/connexions_store_v3.json"   # on garde le store identique (même fichier)
 DEBUG = False
@@ -379,7 +383,7 @@ def compare_scans(scan_a, scan_b):
 
 # ------------------------------------------------
 def build_object_v3(row, obj_id, store_index, force_update, total_csv, oem_conn):
-    raw = build_raw_source(row)
+    raw = build_raw_source(row, RAW_COLUMNS)
     interpreted = build_interpreted(raw)
 
     cached = store_index.get(obj_id)
