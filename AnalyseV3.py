@@ -12,8 +12,7 @@ import time
 import os
 import tempfile
 
-STORE_FILE = os.path.join("Data", "connexions_store_v3.json")
-OEM_CONF_FILE = os.path.join("Data", "oem.conf")
+CONF_FILE = os.path.join("Data", "config.conf"))
 DEBUG = False
 
 RAW_COLUMNS = [
@@ -31,6 +30,47 @@ RAW_COLUMNS = [
     "Cnames DR"
 ]
 
+def load_main_conf():
+    """
+    Lit Data/config.conf et retourne dict:
+      SOURCE_CSV=...
+      SOURCE_JSON=...
+      OEM_CONF_FILE=...
+    """
+    if not os.path.isfile(CONF_FILE):
+        return None, "CONF_MISSING", "Missing %s" % CONF_FILE
+
+    d = {}
+    try:
+        for line in open(CONF_FILE, "rb").read().splitlines():
+            try:
+                s = line.decode("utf-8", "ignore")
+            except:
+                s = line
+            s = s.strip()
+            if not s:
+                continue
+            if s.startswith("#") or s.startswith(";"):
+                continue
+            if "=" not in s:
+                continue
+            k, v = s.split("=", 1)
+            k = k.strip()
+            v = v.strip()
+            if k:
+                d[k] = v
+
+        # validations minimales
+        if not d.get("SOURCE_CSV"):
+            return None, "CONF_INVALID", "SOURCE_CSV is missing in %s" % CONF_FILE
+        if not d.get("SOURCE_JSON"):
+            return None, "CONF_INVALID", "SOURCE_JSON is missing in %s" % CONF_FILE
+        if not d.get("OEM_CONF_FILE"):
+            return None, "CONF_INVALID", "OEM_CONF_FILE is missing in %s" % CONF_FILE
+
+        return d, None, None
+    except Exception as e:
+        return None, "CONF_ERROR", str(e)
 
 # ------------------------------------------------
 def print_help():
@@ -741,23 +781,31 @@ def parse_ids(option, max_id):
 # ------------------------------------------------
 if __name__ == "__main__":
 
+    # Help
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help", "-help"):
         print_help()
         sys.exit(0)
 
-    fichier = sys.argv[1]
-
-    if len(sys.argv) < 3:
-        print_help()
-        sys.exit(1)
-
-    option = sys.argv[2]
-    args = [a.lower() for a in sys.argv[3:]]
+    option = sys.argv[1]
+    args = [a.lower() for a in sys.argv[2:]]
 
     DEBUG = ("-debug" in args)
     force_update = ("-force" in args) or ("-update" in args)
 
-    # OEM conf obligatoire si on doit calculer (new/dirty/force)
+    # ------------------------------------------------
+    # Load main config
+    main_conf, mce, mcd = load_main_conf()
+    if mce:
+        print "Configuration error:", mce
+        print mcd
+        sys.exit(1)
+
+    fichier = main_conf.get("SOURCE_CSV")
+    STORE_FILE = main_conf.get("SOURCE_JSON")
+    OEM_CONF_FILE = main_conf.get("OEM_CONF_FILE")
+
+    # ------------------------------------------------
+    # OEM conf validation
     conf, ce, cd = load_oem_conf()
     if ce:
         if option != "columns":
@@ -768,12 +816,12 @@ if __name__ == "__main__":
 
     oem_conn = conf.get("OEM_CONN") if conf else None
 
-    reader = csv.DictReader(
-        open(fichier, "rb"),
-        delimiter=';',
-        quotechar='"',
-        skipinitialspace=True
-    )
+    # ------------------------------------------------
+    # CSV read
+    reader = csv.DictReader(open(fichier, "rb"),
+                            delimiter=';',
+                            quotechar='"',
+                            skipinitialspace=True)
 
     rows = [normalize_row(r) for r in reader]
 
@@ -785,16 +833,16 @@ if __name__ == "__main__":
             print c
         sys.exit(0)
 
+    # ------------------------------------------------
     ids = parse_ids(option, len(rows))
     if not ids:
         print_help()
         sys.exit(1)
 
-    # Load store / index
+    # ------------------------------------------------
     store = load_store()
     store_index = build_index(store)
 
-    # Rebuild objects list: keep existing not in ids, update ids
     existing = store.get("objects", [])
     keep = []
 
@@ -809,14 +857,11 @@ if __name__ == "__main__":
     idx = 1
     for r in rows:
         if idx in ids:
-            obj = build_object_v3(
-                r, idx, store_index,
-                force_update, total_csv, oem_conn
-            )
+            obj = build_object_v3(r, idx, store_index,
+                                  force_update, total_csv, oem_conn)
             objects.append(obj)
         idx += 1
 
-    # End progress line
     sys.stdout.write("\n")
 
     store["objects"] = keep + objects
