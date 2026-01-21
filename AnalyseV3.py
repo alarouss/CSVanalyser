@@ -791,6 +791,6 @@ if __name__ == "__main__":
     sys.stdout.write("\n")
 
     store["objects"] = keep + objects
-    save_store(store)
+    save_store(STORE_FILE, store)
 
     print "\nAnalyseV3 terminé. Objets générés:", len(objects)
