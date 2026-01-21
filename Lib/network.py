@@ -95,10 +95,6 @@ def compare_scans(scan_a, scan_b):
 
 # ------------------------------------------------
 def compute_network_block(host, step_prefix, obj_id, total_csv, show_progress):
-    """
-    Calcule host/cname/scan.
-    show_progress est injecté depuis AnalyseV3
-    """
     net = {"host": host, "cname": None, "scan": None}
     if not host:
         return net, "HOST_NONE", ("%s: host is empty" % step_prefix)
@@ -115,4 +111,5 @@ def compute_network_block(host, step_prefix, obj_id, total_csv, show_progress):
         net["scan"] = scan
         return net, e2, ("%s: scan resolution failed for cname=%s | %s" % (step_prefix, cname, d2))
     net["scan"] = scan
+
     return net, None, None
