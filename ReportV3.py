@@ -3,7 +3,7 @@
 # ReportV3.py  (base ReportV2 + prise en compte OEM + debug = Error + RawSource)
 
 
-import json, sys, textwrap
+import json, sys, textwrap, re
 from Lib.common import strip_ansi, ustr, pad, trim_lot
 
 KEY_WIDTH   = 24
