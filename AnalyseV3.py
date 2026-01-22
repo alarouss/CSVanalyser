@@ -59,8 +59,10 @@ def build_raw_source(row):
     return dict((c, ustr(row.get(c,u"")).strip()) for c in RAW_COLUMNS)
 
 # ------------------------------------------------
-def build_status(valid,scan,scan_dr,dirty,dirty_reason,err_type,err_detail,mode):
-    return {
+def build_status(valid,scan,scan_dr,dirty,dirty_reason,err_type,err_detail,mode,
+                 oem_err_type=None,oem_err_detail=None):
+
+    st = {
         "ValidSyntax":valid,
         "ScanCompare":scan,
         "ScanCompareDR":scan_dr,
@@ -71,6 +73,12 @@ def build_status(valid,scan,scan_dr,dirty,dirty_reason,err_type,err_detail,mode)
         "Mode":mode,
         "LastUpdateTime":time.strftime("%Y-%m-%d %H:%M:%S")
     }
+
+    if oem_err_type or oem_err_detail:
+        st["OEMErrorType"]=oem_err_type
+        st["OEMErrorDetail"]=oem_err_detail
+
+    return st
 
 # ------------------------------------------------
 def parse_ids(opt,maxid):
@@ -110,12 +118,21 @@ def build_object_v3(row,obj_id,store_index,force_update,total_csv,oem_conn):
     }
 
     # OEM
+    oem_err_type=None
+    oem_err_detail=None
+
     dbname = ustr(raw.get("Databases","")).strip()
     if dbname:
         oh,op,oe,od = oem_get_host_and_port(oem_conn,dbname)
-        if not oe:
+        if oe:
+            oem_err_type=oe
+            oem_err_detail=od
+        else:
             net["OEM"]["host"]=oh
             net["OEM"]["port"]=op
+    else:
+        oem_err_type="OEM_DBNAME_EMPTY"
+        oem_err_detail="Databases column empty"
 
     err_type=None; err_detail=None
     scan=None; scan_dr=None
@@ -141,7 +158,8 @@ def build_object_v3(row,obj_id,store_index,force_update,total_csv,oem_conn):
     status=build_status(True,scan,scan_dr,dirty,dirty_reason,
                         err_type,err_detail,
                         "FORCE_UPDATE" if force_update else
-                        ("AUTO_DIRTY" if dirty else "AUTO"))
+                        ("AUTO_DIRTY" if dirty else "AUTO"),
+                        oem_err_type,oem_err_detail)
 
     return {
         "id":obj_id,
@@ -163,7 +181,6 @@ if __name__=="__main__":
     DEBUG="-debug" in args
     force_update="-force" in args or "-update" in args
 
-    # config
     main_conf,_,_ = load_main_conf()
     fichier = main_conf.get("SOURCE_CSV")
     STORE_FILE = main_conf.get("SOURCE_JSON")
@@ -197,7 +214,7 @@ if __name__=="__main__":
     for i,r in enumerate(rows,1):
         if i in ids:
             pos+=1
-            show_progress(pos,total,"ANALYSE")
+            show_progress(pos,total,"ID=%d"%i)
             objs.append(build_object_v3(r,i,index,force_update,len(rows),oem_conn))
 
     sys.stdout.write("\n")
@@ -206,4 +223,3 @@ if __name__=="__main__":
     save_store(STORE_FILE,store)
 
     print "\nAnalyseV3 terminé. Objets générés:",len(objs)
-
