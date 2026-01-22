@@ -85,7 +85,7 @@ def parse_ids(opt,maxid):
     return None
 
 # ------------------------------------------------
-def build_object_v3(row,obj_id,store_index,force_update,total_csv):
+def build_object_v3(row,obj_id,store_index,force_update,total_csv,oem_conn):
 
     raw = build_raw_source(row)
 
@@ -105,8 +105,17 @@ def build_object_v3(row,obj_id,store_index,force_update,total_csv):
     net = {
         "Current":{"host":cur_o.host,"cname":cur_o.cname,"scan":cur_o.scan},
         "New":{"host":new_o.host,"cname":new_o.cname,"scan":new_o.scan},
-        "NewDR":{"host":dr_o.host,"cname":dr_o.cname,"scan":dr_o.scan}
+        "NewDR":{"host":dr_o.host,"cname":dr_o.cname,"scan":dr_o.scan},
+        "OEM":{"host":None,"port":None,"cname":None,"scan":None}
     }
+
+    # OEM
+    dbname = ustr(raw.get("Databases","")).strip()
+    if dbname:
+        oh,op,oe,od = oem_get_host_and_port(oem_conn,dbname)
+        if not oe:
+            net["OEM"]["host"]=oh
+            net["OEM"]["port"]=op
 
     err_type=None; err_detail=None
     scan=None; scan_dr=None
@@ -158,6 +167,17 @@ if __name__=="__main__":
     main_conf,_,_ = load_main_conf()
     fichier = main_conf.get("SOURCE_CSV")
     STORE_FILE = main_conf.get("SOURCE_JSON")
+    OEM_CONF_FILE = main_conf.get("OEM_CONF_FILE")
+
+    # OEM conn
+    oem_conn=None
+    if OEM_CONF_FILE and os.path.isfile(OEM_CONF_FILE):
+        for l in open(OEM_CONF_FILE,"rb").read().splitlines():
+            try: s=l.decode("utf-8","ignore")
+            except: s=l
+            s=s.strip()
+            if s.startswith("OEM_CONN="):
+                oem_conn=s.split("=",1)[1].strip()
 
     rows=[normalize_row(r) for r in csv.DictReader(open(fichier,"rb"),delimiter=';')]
 
@@ -178,7 +198,7 @@ if __name__=="__main__":
         if i in ids:
             pos+=1
             show_progress(pos,total,"ANALYSE")
-            objs.append(build_object_v3(r,i,index,force_update,len(rows)))
+            objs.append(build_object_v3(r,i,index,force_update,len(rows),oem_conn))
 
     sys.stdout.write("\n")
 
