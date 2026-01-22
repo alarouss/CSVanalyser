@@ -1,124 +1,121 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import json, sys, re
+import json, sys, os, re
 
-# ---------- mappings globaux ----------
 HOST_MAP = {}
-SCAN_MAP = {}
-CNAME_MAP = {}
 DB_MAP = {}
-SERVICE_MAP = {}
+host_counter = 1
 
-HOST_C = 1
-SCAN_C = 1
-CNAME_C = 1
-DB_C = 1
-SERVICE_C = 1
+# ------------------------------------------------
+def get_host_alias(h):
+    global host_counter
+    if not h:
+        return h
+    if h not in HOST_MAP:
+        HOST_MAP[h] = "HOST_%d" % host_counter
+        host_counter += 1
+    return HOST_MAP[h]
 
-def map_value(val, prefix, store):
-    global HOST_C, SCAN_C, CNAME_C, DB_C, SERVICE_C
+def anonymise_db(name):
+    if not name:
+        return name
+    return "{DATABASENAME}"
 
-    if not val:
-        return val
+# ------------------------------------------------
+def anonymise_numbers(val):
+    return re.sub(r"=([0-9]+)", "=XXXX", val)
 
-    if val in store:
-        return store[val]
-
-    if prefix == "HOST":
-        alias = "HOST_%d" % HOST_C
-        HOST_C += 1
-    elif prefix == "SCAN":
-        alias = "SCAN_%d" % SCAN_C
-        SCAN_C += 1
-    elif prefix == "CNAME":
-        alias = "CNAME_%d" % CNAME_C
-        CNAME_C += 1
-    elif prefix == "DB":
-        alias = "DB_%d" % DB_C
-        DB_C += 1
-    elif prefix == "SRV":
-        alias = "SRV_%d" % SERVICE_C
-        SERVICE_C += 1
-    else:
-        alias = prefix + "_X"
-
-    store[val] = alias
-    return alias
-
-# ---------------------------------------------------
-def anonymise_text(txt):
+# ------------------------------------------------
+def anonymise_hosts_in_text(txt):
     if not txt:
         return txt
-
-    # Ports
-    txt = re.sub(r'\b\d{4,5}\b', "XXXX", txt)
-
-    # HOST patterns
-    for h in re.findall(r'[A-Za-z0-9._-]+', txt):
-        if "." in h or "scan" in h.lower() or "host" in h.lower():
-            alias = map_value(h, "HOST", HOST_MAP)
-            txt = txt.replace(h, "{%s}" % alias)
-
+    for h, alias in HOST_MAP.items():
+        txt = txt.replace(h, "{%s}" % alias)
     return txt
 
-# ---------------------------------------------------
-def anonymise_rawsource(rs):
+# ------------------------------------------------
+def anonymise_rawsource(raw):
+    for k in raw:
+        v = raw[k]
+        if not isinstance(v, unicode):
+            try:
+                v = unicode(v, "utf-8", "ignore")
+            except:
+                continue
 
-    for k in rs:
-        v = rs[k]
-        if not v:
+        if k == "Databases":
+            raw[k] = anonymise_db(v)
             continue
-        rs[k] = anonymise_text(v)
 
-# ---------------------------------------------------
+        v = anonymise_numbers(v)
+
+        for d in DB_MAP:
+            v = v.replace(d, "{DATABASENAME}")
+
+        v = anonymise_hosts_in_text(v)
+
+        raw[k] = v
+
+# ------------------------------------------------
 def anonymise_network(net):
 
-    for sec in net:
-        blk = net.get(sec)
-        if not blk:
+    for section in net:
+        blk = net.get(section)
+        if not isinstance(blk, dict):
             continue
 
-        if blk.get("host"):
-            blk["host"] = map_value(blk["host"], "HOST", HOST_MAP)
+        for key in ("host","cname","scan"):
+            val = blk.get(key)
+            if val:
+                blk[key] = get_host_alias(val)
 
-        if blk.get("cname"):
-            blk["cname"] = map_value(blk["cname"], "CNAME", CNAME_MAP)
-
-        if blk.get("scan"):
-            blk["scan"] = map_value(blk["scan"], "SCAN", SCAN_MAP)
-
-        if blk.get("port"):
+        if "port" in blk and blk.get("port"):
             blk["port"] = "XXXX"
 
-# ---------------------------------------------------
+# ------------------------------------------------
 def anonymise_status(st):
 
     for k in ("ErrorDetail","OEMErrorDetail"):
-        if st.get(k):
-            txt = st[k]
+        v = st.get(k)
+        if not v:
+            continue
 
-            for h, a in HOST_MAP.items():
-                txt = txt.replace(h, "{%s}" % a)
-            for s, a in SCAN_MAP.items():
-                txt = txt.replace(s, "{%s}" % a)
+        if not isinstance(v, unicode):
+            v = unicode(v,"utf-8","ignore")
 
-            st[k] = txt
+        for h, alias in HOST_MAP.items():
+            v = v.replace(h, "{%s}" % alias)
 
-# ---------------------------------------------------
+        for d in DB_MAP:
+            v = v.replace(d, "{DATABASENAME}")
+
+        v = anonymise_numbers(v)
+        st[k] = v
+
+# ------------------------------------------------
+def parse_ids(val):
+    out=[]
+    for p in val.split(","):
+        p=p.strip()
+        if p:
+            out.append(int(p))
+    return out
+
+# ------------------------------------------------
 def main():
 
     src = None
-    target = None
+    ids = []
 
     for a in sys.argv[1:]:
         if a.startswith("source="):
             src = a.split("=",1)[1]
         elif a.startswith("id="):
-            target = int(a.split("=",1)[1])
+            ids = parse_ids(a.split("=",1)[1])
 
-    if not src or target is None:
-        print "Usage: python AnonymiseID.py source=FILE.json id=N"
+    if not src or not ids:
+        print "Usage: python AnonymiseID.py source=FILE.json id=2,3,4"
         sys.exit(1)
 
     if not os.path.isfile(src):
@@ -127,22 +124,32 @@ def main():
 
     data = json.loads(open(src,"rb").read().decode("utf-8"))
 
-    obj = None
-    for o in data.get("objects",[]):
-        if o.get("id")==target:
-            obj = o
-            break
+    objects = data.get("objects",[])
 
-    if not obj:
-        print "ID not found:", target
+    selected = [o for o in objects if o.get("id") in ids]
+
+    if not selected:
+        print "No matching IDs found"
         sys.exit(1)
 
-    anonymise_rawsource(obj.get("RawSource",{}))
-    anonymise_network(obj.get("Network",{}))
-    anonymise_status(obj.get("Status",{}))
+    # collect DB names
+    for o in selected:
+        db = o.get("RawSource",{}).get("Databases")
+        if db:
+            DB_MAP[db] = "{DATABASENAME}"
 
-    print json.dumps(obj, indent=2, ensure_ascii=False).encode("utf-8")
+    # anonymise all
+    for o in selected:
+        anonymise_network(o.get("Network",{}))
+        anonymise_rawsource(o.get("RawSource",{}))
+        anonymise_status(o.get("Status",{}))
 
-# ---------------------------------------------------
+        # OEM section outside Network (V3 structure)
+        if "OEM" in o and isinstance(o["OEM"],dict):
+            anonymise_network({"OEM":o["OEM"]})
+
+    print json.dumps(selected, indent=2, ensure_ascii=False).encode("utf-8")
+
+# ------------------------------------------------
 if __name__=="__main__":
     main()
