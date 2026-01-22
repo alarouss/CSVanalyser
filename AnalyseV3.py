@@ -10,6 +10,7 @@ from Lib.common import ustr
 from Lib.config import load_main_conf
 from Lib.store import load_store, save_store, build_index
 from Lib.jdbc_flow_v2 import interpret, compare
+from Lib.oem_flow import oem_get_host_and_port
 
 DEBUG = False
 
