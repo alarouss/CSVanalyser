@@ -90,28 +90,21 @@ def parse_ids(opt,maxid):
 # -------------------------
 if __name__=="__main__":
 
-    fichier=sys.argv[1]
-    option=sys.argv[2]
-    args=[a.lower() for a in sys.argv[3:]]
+    if len(sys.argv) < 2:
+        print_help()
+        sys.exit(1)
 
-    force="-force" in args or "-update" in args
+    arg1 = sys.argv[1]
 
-    rows=[dict((k,ustr(v)) for k,v in r.items())
-          for r in csv.DictReader(open(fichier,"rb"),delimiter=';')]
-
-    ids=parse_ids(option,len(rows))
-
-    store=load_store("Data/connexions_store_v3.json")
-    index=build_index(store)
-
-    keep=[o for o in store.get("objects",[]) if o["id"] not in ids]
-
-    objs=[]
-    for i,r in enumerate(rows,1):
-        if i in ids:
-            objs.append(build_object(r,i,index,force))
-
-    store["objects"]=keep+objs
-    save_store("Data/connexions_store_v3.json",store)
-
-    print "\nAnalyseV3 terminé. Objets générés:",len(objs)
+    # Cas: python AnalyseV3.py ligne=10 ...
+    if "=" in arg1:
+        fichier = load_main_conf()[0].get("SOURCE_CSV")
+        option = arg1
+        args = [a.lower() for a in sys.argv[2:]]
+    else:
+        fichier = arg1
+        if len(sys.argv) < 3:
+            print_help()
+            sys.exit(1)
+        option = sys.argv[2]
+        args = [a.lower() for a in sys.argv[3:]]
