@@ -1,822 +1,117 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# AnalyseV3.py (base = AnalyseV2 + ajout OEM, sans régression)
-
-import csv
-import re
-import sys
-import subprocess
-import json
-import time
-import os
-import tempfile
-
+import csv,sys,time
+from Lib.jdbc_flow_v2 import interpret,compare
+from Lib.store import load_store,save_store,build_index
 from Lib.common import ustr
-from Lib.config import load_main_conf
-from Lib.store import load_store, save_store, build_index
-from Lib.jdbc_raw import interpret_raw_jdbc
 
-CONF_FILE = os.path.join("Data", "config.conf")
-DEBUG = False
-
-RAW_COLUMNS = [
-    "Statut Global",
-    "Lot",
-    "Application",
-    "Databases",
-    "DR O/N",
-    "Current connection string",
-    "New connection string",
-    "New connection string avec DR",
-    "Cnames",
-    "Services",
-    "Acces",
-    "Cnames DR"
+RAW_COLUMNS=[
+ "Statut Global","Lot","Application","Databases","DR O/N",
+ "Current connection string","New connection string",
+ "New connection string avec DR","Cnames","Services","Acces","Cnames DR"
 ]
-# ------------------------------------------------
-def print_help():
-    print """AnalyseV3.py - Analyse JDBC Oracle V3 (V2 + OEM)
 
-Usage:
- python AnalyseV3.py file.csv ligne=N|ALL [OPTIONS]
- python AnalyseV3.py file.csv id=N [OPTIONS]
- python AnalyseV3.py file.csv id=1,2,5 [OPTIONS]
- python AnalyseV3.py file.csv columns
+# -------------------------
+def build_raw(row):
+    return dict((c,ustr(row.get(c,u"")).strip()) for c in RAW_COLUMNS)
 
-Options:
- -debug
- -force     (recalcule reseau: nslookup/srvctl + OEM sqlplus, ignore cache)
- -update    (alias de -force)
- -h | -help | --help
-
-OEM:
- - Le script lit oem.conf (dans le répertoire courant) et attend la variable:
-     OEM_CONN=...   (chaine pour sqlplus)
- - OEM est stocké dans JSON sous Network/OEM : host,cname,scan (+ port optionnel)
-"""
-
-
-# ------------------------------------------------
-def debug_print(msg):
-    if DEBUG:
-        try:
-            print msg
-        except:
-            pass
-
-
-# ------------------------------------------------
-def normalize_key(k):
-    return ustr(k).replace(u'\ufeff', u'').strip()
-
-
-def normalize_row(row):
-    out = {}
-    for k, v in row.items():
-        out[normalize_key(k)] = ustr(v)
-    return out
-
-
-# ------------------------------------------------
-def show_progress(idval, total, step):
-    try:
-        percent = int((float(idval) / float(total)) * 100) if total else 100
-    except:
-        percent = 100
-
-    if percent < 0:
-        percent = 0
-    if percent > 100:
-        percent = 100
-
-    dots = int(percent / 2)
-    bar = "." * dots
-
-    step_txt = (step or "")[:12]
-    label_core = "Id:%5d/%-5d | %-12s" % (int(idval), int(total), step_txt)
-    label = "[%-34s]" % label_core
-
-    sys.stdout.write("\rProgress: %s %-50s %3d%%\033[K" % (label, bar, percent))
-    sys.stdout.flush()
-
-
-# ------------------------------------------------
-class JdbcChaine(object):
-    def __init__(self):
-        self.host = None
-        self.port = None
-        self.service_name = None
-        self.type_adresse = None
-        self.valide = False
-
-
-# ------------------------------------------------
-def clean_jdbc(raw):
-    if not raw:
-        return None
-    raw = ustr(raw).strip()
-    if u'"' in raw:
-        p = raw.split(u'"')
-        if len(p) >= 2:
-            raw = p[1]
-    return raw.strip()
-
-
-# ------------------------------------------------
-def parse_simple_jdbc(raw):
-    raw = raw or u""
-    obj = JdbcChaine()
-    m = re.search(r'jdbc:oracle:thin:@(.+?):(\d+)[/:](.+)', raw, re.I)
-    if not m:
-        return obj
-    obj.host = m.group(1).strip()
-    obj.port = m.group(2).strip()
-    obj.service_name = m.group(3).strip()
-    obj.type_adresse = "SCAN" if obj.host and ("scan" in obj.host.lower()) else "NON_SCAN"
-    obj.valide = True
-    return obj
-
-
-def parse_sqlnet_jdbc(raw):
-    raw = raw or u""
-    obj = JdbcChaine()
-    h = re.search(r'host=([^)]+)', raw, re.I)
-    p = re.search(r'port=(\d+)', raw, re.I)
-    s = re.search(r'service_name=([^)]+)', raw, re.I)
-    if not (h and p and s):
-        return obj
-    obj.host = h.group(1).strip()
-    obj.port = p.group(1).strip()
-    obj.service_name = s.group(1).strip()
-    obj.type_adresse = "SCAN" if obj.host and ("scan" in obj.host.lower()) else "NON_SCAN"
-    obj.valide = True
-    return obj
-
-
-def parse_jdbc(raw):
-    o = parse_simple_jdbc(raw)
-    if o.valide:
-        return o
-    return parse_sqlnet_jdbc(raw)
-
-
-# ------------------------------------------------
-def extract_dr_hosts(jdbc):
-    if not jdbc:
-        return []
-    seen = {}
-    out = []
-    for h in re.findall(r'host=([^)]+)', jdbc, re.I):
-        hh = h.strip()
-        if hh and hh not in seen:
-            seen[hh] = 1
-            out.append(hh)
-    return out
-
-
-# ------------------------------------------------
-def resolve_cname(host):
-    try:
-        if not host:
-            return None, "CNAME_HOST_NONE", "Host is None"
-
-        p = subprocess.Popen(["nslookup", host],
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE)
-        out, err = p.communicate()
-        output = out.decode("utf-8", "ignore")
-
-        cname = None
-        for line in output.splitlines():
-            line = line.strip()
-            if line.startswith("Nom") or line.startswith("Name"):
-                parts = line.split(":", 1)
-                if len(parts) == 2:
-                    cname = parts[1].strip()
-                    break
-
-        if not cname:
-            return None, "CNAME_NSLOOKUP_ERROR", "No Name/Nom in nslookup for " + host
-
-        if "," in cname:
-            cname = cname.split(",")[0].strip()
-
-        return cname, None, None
-    except Exception as e:
-        return None, "CNAME_EXCEPTION", str(e)
-
-
-# ------------------------------------------------
-def resolve_scan_address(host):
-    try:
-        if not host:
-            return None, "HOST_NONE", "Host is None"
-
-        if "scan" in host.lower():
-            p = subprocess.Popen(["nslookup", host],
-                                 stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE)
-            out, err = p.communicate()
-            output = out.decode("utf-8", "ignore")
-            for line in output.splitlines():
-                line = line.strip()
-                if line.startswith("Nom") or line.startswith("Name"):
-                    return line.split(":", 1)[1].strip(), None, None
-            return None, "NSLOOKUP_ERROR", "No Name in nslookup for " + host
-
-        cmd = [
-            "ssh",
-            "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=/dev/null",
-            "oracle@%s" % host,
-            ". /home/oracle/.bash_profile ; srvctl config scan"
-        ]
-        p = subprocess.Popen(cmd,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE)
-        out, err = p.communicate()
-        output = out.decode("utf-8", "ignore")
-        for line in output.splitlines():
-            line = line.strip()
-            if line.startswith("SCAN name"):
-                result = line.split(":", 1)[1].strip()
-                if "," in result:
-                    result = result.split(",")[0].strip()
-                return result, None, None
-
-        return None, "SRVCTL_ERROR", "No SCAN name in srvctl for " + host
-    except Exception as e:
-        return None, "EXCEPTION", str(e)
-
-
-def normalize_scan_name(name):
-    if not name:
-        return None
-    name = name.strip()
-    if "," in name:
-        name = name.split(",")[0].strip()
-    if "." in name:
-        name = name.split(".")[0].strip()
-    return name.lower()
-
-
-# ------------------------------------------------
-def build_raw_source(row):
-    raw = {}
-    for c in RAW_COLUMNS:
-        v = row.get(c, u"")
-        if v is None:
-            v = u""
-        raw[c] = ustr(v).strip()
-    return raw
-
-
-# ------------------------------------------------
-def build_interpreted(raw):
-    cur = clean_jdbc(raw.get("Current connection string"))
-    new = clean_jdbc(raw.get("New connection string"))
-    newdr = clean_jdbc(raw.get("New connection string avec DR"))
-
-    cur_obj = parse_jdbc(cur)
-    new_obj = parse_jdbc(new)
-    newdr_obj = parse_jdbc(newdr)
-
+# -------------------------
+def build_status(valid,scan,scan_dr,dirty,dirty_reason,err_type,err_detail,mode):
     return {
-        "CurrentJdbc": cur,
-        "NewJdbc": new,
-        "NewJdbcDR": newdr,
-        "ParsedCurrentJdbc": {
-            "host": cur_obj.host,
-            "port": cur_obj.port,
-            "service": cur_obj.service_name,
-            "type_adresse": cur_obj.type_adresse,
-            "valide": cur_obj.valide
-        },
-        "ParsedNewJdbc": {
-            "host": new_obj.host,
-            "port": new_obj.port,
-            "service": new_obj.service_name,
-            "type_adresse": new_obj.type_adresse,
-            "valide": new_obj.valide
-        },
-        "ParsedNewJdbcDR": {
-            "host": newdr_obj.host,
-            "port": newdr_obj.port,
-            "service": newdr_obj.service_name,
-            "type_adresse": newdr_obj.type_adresse,
-            "valide": newdr_obj.valide
-        },
-        "DRHosts": extract_dr_hosts(newdr)
+      "ValidSyntax":valid,
+      "ScanCompare":scan,
+      "ScanCompareDR":scan_dr,
+      "Dirty":dirty,
+      "DirtyReason":dirty_reason,
+      "ErrorType":err_type,
+      "ErrorDetail":err_detail,
+      "Mode":mode,
+      "LastUpdateTime":time.strftime("%Y-%m-%d %H:%M:%S")
     }
 
+# -------------------------
+def build_object(row,i,store_index,force):
 
-# ------------------------------------------------
-def build_status(valid, scan, scan_dr, dirty, dirty_reason,
-                 err_type, err_detail, mode,
-                 oem_err_type=None, oem_err_detail=None):
+    raw=build_raw(row)
+    cached=store_index.get(i)
 
-    st = {
-        "ValidSyntax": bool(valid),
-        "ScanCompare": scan,
-        "ScanCompareDR": scan_dr,
-        "Dirty": bool(dirty),
-        "DirtyReason": dirty_reason,
-        "ErrorType": err_type,
-        "ErrorDetail": err_detail,
-        "Mode": mode,
-        "LastUpdateTime": time.strftime("%Y-%m-%d %H:%M:%S")
+    dirty=False; dirty_reason=None
+    if cached and cached.get("RawSource")!=raw:
+        dirty=True; dirty_reason="RAW_CHANGED"
+
+    cur,new,dr = raw["Current connection string"],raw["New connection string"],raw["New connection string avec DR"]
+
+    cur_o,e1,d1=interpret(cur)
+    new_o,e2,d2=interpret(new)
+    dr_o,e3,d3=interpret(dr)
+
+    net={
+      "Current":{"host":cur_o.host,"cname":cur_o.cname,"scan":cur_o.scan},
+      "New":{"host":new_o.host,"cname":new_o.cname,"scan":new_o.scan},
+      "NewDR":{"host":dr_o.host,"cname":dr_o.cname,"scan":dr_o.scan}
     }
 
-    if oem_err_type or oem_err_detail:
-        st["OEMErrorType"] = oem_err_type
-        st["OEMErrorDetail"] = oem_err_detail
+    err_type=None; err_detail=None
+    scan=None; scan_dr=None
 
-    return st
-# ------------------------------------------------
-# ------------------------------------------------
-def load_oem_conf():
-    """
-    Lit OEM_CONF_FILE et retourne dict des variables.
-    Format supporté:
-      KEY=VALUE
-    Ignore lignes vides et lignes commençant par # ou ;
-    """
-    if not os.path.isfile(OEM_CONF_FILE):
-        return None, "OEM_CONF_MISSING", "Missing %s in current directory" % OEM_CONF_FILE
-
-    d = {}
-    try:
-        for line in open(OEM_CONF_FILE, "rb").read().splitlines():
-            try:
-                s = line.decode("utf-8", "ignore")
-            except:
-                s = line
-            s = s.strip()
-            if not s:
-                continue
-            if s.startswith("#") or s.startswith(";"):
-                continue
-            if "=" not in s:
-                continue
-            k, v = s.split("=", 1)
-            k = k.strip()
-            v = v.strip()
-            if k:
-                d[k] = v
-
-        if "OEM_CONN" not in d or not d.get("OEM_CONN"):
-            return None, "OEM_CONF_INVALID", "OEM_CONN is missing or empty in %s" % OEM_CONF_FILE
-
-        return d, None, None
-    except Exception as e:
-        return None, "OEM_CONF_ERROR", str(e)
-
-
-# ------------------------------------------------
-def oem_get_host_and_port(oem_conn, target_name):
-    """
-    Appelle sqlplus -s OEM_CONN et retourne (host, port, err_type, err_detail)
-    """
-    if not oem_conn:
-        return None, None, "OEM_CONN_EMPTY", "OEM_CONN is empty"
-    if not target_name:
-        return None, None, "OEM_TARGET_EMPTY", "Database target name is empty"
-
-    sql = []
-    sql.append("set pages 0")
-    sql.append("set head off")
-    sql.append("set feed off")
-    sql.append("set verify off")
-    sql.append("set echo off")
-    sql.append("set trimspool on")
-    sql.append("set lines 400")
-    sql.append("define TNAME='%s'" % target_name.replace("'", "''"))
-    sql.append("""
-select A.HOST_NAME||'|'||F.property_value
-from SYSMAN.MGMT$DB_DBNINSTANCEINFO A, SYSMAN.MGMT$TARGET_PROPERTIES F
-where A.TARGET_NAME='&&TNAME'
-  and F.TARGET_GUID = A.TARGET_GUID
-  and F.property_name = 'Port';
-""".strip())
-    sql.append("exit")
-
-    payload = "\n".join(sql) + "\n"
-
-    try:
-        p = subprocess.Popen(["sqlplus", "-s", oem_conn],
-                             stdin=subprocess.PIPE,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE)
-        out, err = p.communicate(payload)
-        rc = p.returncode
-
-        o = out.decode("utf-8", "ignore").strip()
-        e = err.decode("utf-8", "ignore").strip()
-
-        if rc not in (0, None):
-            return None, None, "OEM_SQLPLUS_ERROR", "sqlplus rc=%s | %s" % (rc, e or o)
-
-        if not o:
-            return None, None, "OEM_NO_RESULT", "No output for target %s" % target_name
-
-        line = None
-        for ln in o.splitlines():
-            ln = ln.strip()
-            if ln:
-                line = ln
-                break
-
-        if not line:
-            return None, None, "OEM_NO_RESULT", "No data line for target %s" % target_name
-
-        if "|" in line:
-            h, prt = line.split("|", 1)
-            h = h.strip()
-            prt = prt.strip()
-        else:
-            h = line.strip()
-            prt = None
-
-        if not h:
-            return None, None, "OEM_BAD_OUTPUT", "Bad output line: %s" % line
-
-        return h, prt, None, None
-
-    except Exception as ex:
-        return None, None, "OEM_EXCEPTION", str(ex)
-
-
-# ------------------------------------------------
-def compute_network_block(host, step_prefix, obj_id, total_csv):
-    net = {"host": host, "cname": None, "scan": None}
-
-    if not host:
-        return net, "HOST_NONE", ("%s: host is empty" % step_prefix)
-
-    show_progress(obj_id, total_csv, "%s_CNAME" % step_prefix)
-    cname, e1, d1 = resolve_cname(host)
-    if e1:
-        return net, "CNAME_ERROR", ("%s: nslookup cname failed for host=%s | %s" %
-                                    (step_prefix, host, d1))
-    net["cname"] = cname
-
-    show_progress(obj_id, total_csv, "%s_SCAN" % step_prefix)
-    scan, e2, d2 = resolve_scan_address(cname)
-    if e2:
-        net["scan"] = scan
-        return net, e2, ("%s: scan resolution failed for cname=%s | %s" %
-                         (step_prefix, cname, d2))
-
-    net["scan"] = scan
-    return net, None, None
-
-
-def compare_scans(scan_a, scan_b):
-    na = normalize_scan_name(scan_a)
-    nb = normalize_scan_name(scan_b)
-    if (not na) or (not nb):
-        return None
-    return (na == nb)
-# ------------------------------------------------
-def build_object_v3(row, obj_id, store_index, force_update, total_csv, oem_conn):
-
-    raw = build_raw_source(row)
-    interpreted = build_interpreted(raw)
-    from Lib.jdbc_raw import interpret_raw_jdbc
-
-    raw_cur = raw.get("Current connection string")
-    raw_new = raw.get("New connection string")
-    
-    raw_cur_obj, raw_cur_err, raw_cur_det = interpret_raw_jdbc(raw_cur)
-    raw_new_obj, raw_new_err, raw_new_det = interpret_raw_jdbc(raw_new)
-    
-    interpreted["RawAnalysis"] = {
-        "Current": {
-            "host": raw_cur_obj.host,
-            "cname": raw_cur_obj.cname,
-            "scan": raw_cur_obj.scan,
-            "error": raw_cur_err,
-            "detail": raw_cur_det
-        },
-        "New": {
-            "host": raw_new_obj.host,
-            "cname": raw_new_obj.cname,
-            "scan": raw_new_obj.scan,
-            "error": raw_new_err,
-            "detail": raw_new_det
-        }
-    }
-
-
-    cached = store_index.get(obj_id)
-    dirty = False
-    dirty_reason = None
-
-    if cached and cached.get("RawSource") != raw:
-        dirty = True
-        dirty_reason = "RAW_CHANGED"
-
-    # PARSE progress
-    show_progress(obj_id, total_csv, "PARSE")
-
-    pc = interpreted.get("ParsedCurrentJdbc", {})
-    pn = interpreted.get("ParsedNewJdbc", {})
-    pdr = interpreted.get("ParsedNewJdbcDR", {})
-
-    valid_main = bool(pc.get("valide")) and bool(pn.get("valide"))
-
-    # Cache mode
-    if cached and (not dirty) and (not force_update):
-        st = cached.get("Status", {})
-        st["Mode"] = "AUTO_CACHE"
-        return {
-            "id": obj_id,
-            "RawSource": raw,
-            "Interpreted": interpreted,
-            "Network": cached.get("Network", {}),
-            "Status": st
-        }
-
-    mode = "FORCE_UPDATE" if force_update else ("AUTO_DIRTY" if dirty else "AUTO")
-
-    net = {
-        "Current": {"host": pc.get("host"), "cname": None, "scan": None},
-        "New": {"host": pn.get("host"), "cname": None, "scan": None},
-        "NewDR": {"host": pdr.get("host"), "cname": None, "scan": None},
-        "OEM": {"host": None, "port": None, "cname": None, "scan": None}
-    }
-
-    scan_status = None
-    scan_dr_status = None
-    err_type = None
-    err_detail = None
-    oem_err_type = None
-    oem_err_detail = None
-
-    if not valid_main:
-        scan_status = "ERROR"
-        err_type = "SYNTAX_ERROR"
-        err_detail = "Parsing failed for CurrentJdbc or NewJdbc"
-
-        status = build_status(False, scan_status, scan_dr_status,
-                              dirty, dirty_reason,
-                              err_type, err_detail, mode)
-
-        return {
-            "id": obj_id,
-            "RawSource": raw,
-            "Interpreted": interpreted,
-            "Network": net,
-            "Status": status
-        }
-
-    # CURRENT
-    net_cur, ecur, dcur = compute_network_block(
-        net["Current"]["host"], "CURRENT", obj_id, total_csv
-    )
-    net["Current"] = net_cur
-    if ecur and (not err_type):
-        err_type = ecur
-        err_detail = dcur
-
-    # NEW
-    net_new, enew, dnew = compute_network_block(
-        net["New"]["host"], "NEW", obj_id, total_csv
-    )
-    net["New"] = net_new
-    if enew and (not err_type):
-        err_type = enew
-        err_detail = dnew
-
-    # Compare Current vs New
-    if err_type:
-        scan_status = "ERROR"
+    if e1 or e2:
+        scan="ERROR"; err_type=e1 or e2; err_detail=d1 or d2
     else:
-        eq = compare_scans(net["Current"].get("scan"),
-                           net["New"].get("scan"))
+        eq=compare(cur_o.scan,new_o.scan)
         if eq is None:
-            scan_status = "ERROR"
-            err_type = "SCAN_COMPARE_ERROR"
-            err_detail = "Normalization failed for SCAN compare (Current vs New)"
+            scan="ERROR"; err_type="SCAN_COMPARE_ERROR"; err_detail="Normalization failed"
         else:
-            scan_status = "VALIDE" if eq else "DIFFERENT"
+            scan="VALIDE" if eq else "DIFFERENT"
             if not eq:
-                err_type = "SCAN_DIFFERENT"
-                err_detail = "SCAN differs between Current and New (current=%s, new=%s)" % (
-                    ustr(net["Current"].get("scan")).encode("utf-8"),
-                    ustr(net["New"].get("scan")).encode("utf-8")
-                )
+                err_type="SCAN_DIFFERENT"; err_detail="Current and New SCAN differ"
 
-    # DR
-    if interpreted.get("NewJdbcDR"):
-        valid_dr = bool(pc.get("valide")) and bool(pdr.get("valide"))
+    if dr_o.valide:
+        eqdr=compare(cur_o.scan,dr_o.scan)
+        scan_dr="VALIDE" if eqdr else "DIFFERENT"
 
-        if not valid_dr:
-            scan_dr_status = "ERROR"
-            if not err_type:
-                err_type = "SYNTAX_ERROR_DR"
-                err_detail = "Parsing failed for DR comparison (CurrentJdbc or NewJdbcDR)"
-        else:
-            net_dr, edr, ddr = compute_network_block(
-                net["NewDR"]["host"], "NEWDR", obj_id, total_csv
-            )
-            net["NewDR"] = net_dr
+    status=build_status(True,scan,scan_dr,dirty,dirty_reason,err_type,err_detail,
+                        "FORCE_UPDATE" if force else ("AUTO_DIRTY" if dirty else "AUTO"))
 
-            if edr:
-                scan_dr_status = "ERROR"
-                if not err_type:
-                    err_type = edr
-                    err_detail = ddr
-            else:
-                eqdr = compare_scans(net["Current"].get("scan"),
-                                     net["NewDR"].get("scan"))
+    return {"id":i,"RawSource":raw,"Network":net,"Status":status}
 
-                if eqdr is None:
-                    scan_dr_status = "ERROR"
-                    if not err_type:
-                        err_type = "SCAN_COMPARE_ERROR_DR"
-                        err_detail = "Normalization failed for SCAN compare (Current vs DR)"
-                else:
-                    scan_dr_status = "VALIDE" if eqdr else "DIFFERENT"
-
-                same_as_current = compare_scans(net["NewDR"].get("scan"),
-                                                net["Current"].get("scan"))
-                same_as_new = compare_scans(net["NewDR"].get("scan"),
-                                            net["New"].get("scan"))
-
-                if (same_as_current is True) or (same_as_new is True):
-                    scan_dr_status = "ERROR"
-                    if not err_type:
-                        err_type = "DR_SAME_AS_PRIMARY"
-                        err_detail = "DR points to same SCAN as primary/new (dr=%s, current=%s, new=%s)" % (
-                            ustr(net["NewDR"].get("scan")).encode("utf-8"),
-                            ustr(net["Current"].get("scan")).encode("utf-8"),
-                            ustr(net["New"].get("scan")).encode("utf-8")
-                        )
-                    else:
-                        try:
-                            err_detail = (ustr(err_detail) + u" | DR_SAME_AS_PRIMARY").encode("utf-8")
-                        except:
-                            pass
-
-    # OEM
-    dbname = ustr(raw.get("Databases", u"")).strip()
-
-    if dbname:
-        show_progress(obj_id, total_csv, "OEM_SQLPLUS")
-
-        oem_host, oem_port, oe, od = oem_get_host_and_port(oem_conn, dbname)
-
-        if oe:
-            oem_err_type = oe
-            oem_err_detail = od
-        else:
-            net["OEM"]["host"] = oem_host
-            net["OEM"]["port"] = oem_port
-
-            net_oem, eo2, do2 = compute_network_block(
-                oem_host, "OEM", obj_id, total_csv
-            )
-
-            net["OEM"]["cname"] = net_oem.get("cname")
-            net["OEM"]["scan"] = net_oem.get("scan")
-
-            if eo2 and (not oem_err_type):
-                oem_err_type = eo2
-                oem_err_detail = do2
-    else:
-        oem_err_type = "OEM_DBNAME_EMPTY"
-        oem_err_detail = "Databases field is empty; cannot query OEM"
-
-    status = build_status(True, scan_status, scan_dr_status,
-                          dirty, dirty_reason,
-                          err_type, err_detail, mode,
-                          oem_err_type=oem_err_type,
-                          oem_err_detail=oem_err_detail)
-
-    return {
-        "id": obj_id,
-        "RawSource": raw,
-        "Interpreted": interpreted,
-        "Network": net,
-        "Status": status
-    }
-# ------------------------------------------------
-def parse_ids(option, max_id):
-    """
-    id=N or id=1,2,5
-    ligne=N or ligne=ALL
-    """
-    opt = option.strip()
-
-    if opt.lower().startswith("id="):
-        s = opt.split("=", 1)[1].strip()
-        if "," in s:
-            out = []
-            for part in s.split(","):
-                part = part.strip()
-                if part:
-                    out.append(int(part))
-            return out
+# -------------------------
+def parse_ids(opt,maxid):
+    if opt.startswith("id="):
+        s=opt.split("=",1)[1]
+        if "," in s: return [int(x) for x in s.split(",")]
         return [int(s)]
-
-    if opt.lower().startswith("ligne="):
-        v = opt.split("=", 1)[1].strip()
-        if v.upper() == "ALL":
-            return range(1, max_id + 1)
-        return range(1, int(v) + 1)
-
+    if opt.startswith("ligne="):
+        v=opt.split("=",1)[1]
+        if v.upper()=="ALL": return range(1,maxid+1)
+        return range(1,int(v)+1)
     return None
 
+# -------------------------
+if __name__=="__main__":
 
-# ------------------------------------------------
-if __name__ == "__main__":
+    fichier=sys.argv[1]
+    option=sys.argv[2]
+    args=[a.lower() for a in sys.argv[3:]]
 
-    # Help
-    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help", "-help"):
-        print_help()
-        sys.exit(0)
+    force="-force" in args or "-update" in args
 
-    option = sys.argv[1]
-    args = [a.lower() for a in sys.argv[2:]]
+    rows=[dict((k,ustr(v)) for k,v in r.items())
+          for r in csv.DictReader(open(fichier,"rb"),delimiter=';')]
 
-    DEBUG = ("-debug" in args)
-    force_update = ("-force" in args) or ("-update" in args)
+    ids=parse_ids(option,len(rows))
 
-    # ------------------------------------------------
-    # Load main config
-    main_conf, mce, mcd = load_main_conf()
-    if mce:
-        print "Configuration error:", mce
-        print mcd
-        sys.exit(1)
+    store=load_store("Data/connexions_store_v3.json")
+    index=build_index(store)
 
-    fichier = main_conf.get("SOURCE_CSV")
-    STORE_FILE = main_conf.get("SOURCE_JSON")
-    OEM_CONF_FILE = main_conf.get("OEM_CONF_FILE")
+    keep=[o for o in store.get("objects",[]) if o["id"] not in ids]
 
-    # ------------------------------------------------
-    # OEM conf validation
-    conf, ce, cd = load_oem_conf()
-    if ce:
-        if option != "columns":
-            print "OEM configuration error:", ce
-            print cd
-            sys.exit(1)
-        conf = None
+    objs=[]
+    for i,r in enumerate(rows,1):
+        if i in ids:
+            objs.append(build_object(r,i,index,force))
 
-    oem_conn = conf.get("OEM_CONN") if conf else None
+    store["objects"]=keep+objs
+    save_store("Data/connexions_store_v3.json",store)
 
-    # ------------------------------------------------
-    # CSV read
-    reader = csv.DictReader(open(fichier, "rb"),
-                            delimiter=';',
-                            quotechar='"',
-                            skipinitialspace=True)
-
-    rows = [normalize_row(r) for r in reader]
-
-    if option == "columns":
-        if not rows:
-            print "No rows in CSV."
-            sys.exit(0)
-        for c in rows[0].keys():
-            print c
-        sys.exit(0)
-
-    # ------------------------------------------------
-    ids = parse_ids(option, len(rows))
-    if not ids:
-        print_help()
-        sys.exit(1)
-
-    # ------------------------------------------------
-    store = load_store(STORE_FILE)
-    store_index = build_index(store)
-
-    existing = store.get("objects", [])
-    keep = []
-
-    for o in existing:
-        oid = o.get("id")
-        if oid not in ids:
-            keep.append(o)
-
-    objects = []
-    total_csv = len(rows)
-
-    idx = 1
-    for r in rows:
-        if idx in ids:
-            obj = build_object_v3(r, idx, store_index,
-                                  force_update, total_csv, oem_conn)
-            objects.append(obj)
-        idx += 1
-
-    sys.stdout.write("\n")
-
-    store["objects"] = keep + objects
-    save_store(STORE_FILE, store)
-
-    print "\nAnalyseV3 terminé. Objets générés:", len(objects)
+    print "\nAnalyseV3 terminé. Objets générés:",len(objs)
