@@ -5,6 +5,7 @@ import csv,sys,time
 from Lib.jdbc_flow_v2 import interpret,compare
 from Lib.store import load_store,save_store,build_index
 from Lib.common import ustr
+from Lib.config import load_main_conf
 
 RAW_COLUMNS=[
  "Statut Global","Lot","Application","Databases","DR O/N",
