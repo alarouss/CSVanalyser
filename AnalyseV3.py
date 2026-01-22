@@ -483,6 +483,31 @@ def build_object_v3(row, obj_id, store_index, force_update, total_csv, oem_conn)
 
     raw = build_raw_source(row)
     interpreted = build_interpreted(raw)
+    from Lib.jdbc_raw import interpret_raw_jdbc
+
+    raw_cur = raw.get("Current connection string")
+    raw_new = raw.get("New connection string")
+    
+    raw_cur_obj, raw_cur_err, raw_cur_det = interpret_raw_jdbc(raw_cur)
+    raw_new_obj, raw_new_err, raw_new_det = interpret_raw_jdbc(raw_new)
+    
+    interpreted["RawAnalysis"] = {
+        "Current": {
+            "host": raw_cur_obj.host,
+            "cname": raw_cur_obj.cname,
+            "scan": raw_cur_obj.scan,
+            "error": raw_cur_err,
+            "detail": raw_cur_det
+        },
+        "New": {
+            "host": raw_new_obj.host,
+            "cname": raw_new_obj.cname,
+            "scan": raw_new_obj.scan,
+            "error": raw_new_err,
+            "detail": raw_new_det
+        }
+    }
+
 
     cached = store_index.get(obj_id)
     dirty = False
