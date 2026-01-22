@@ -108,18 +108,22 @@ def anonymise_status(st):
 # ---------------------------------------------------
 def main():
 
-    if len(sys.argv) < 3:
-        print "Usage: python AnonymiseID.py source.json id=N"
+    src = None
+    target = None
+
+    for a in sys.argv[1:]:
+        if a.startswith("source="):
+            src = a.split("=",1)[1]
+        elif a.startswith("id="):
+            target = int(a.split("=",1)[1])
+
+    if not src or target is None:
+        print "Usage: python AnonymiseID.py source=FILE.json id=N"
         sys.exit(1)
 
-    src = sys.argv[1]
-    opt = sys.argv[2]
-
-    if not opt.startswith("id="):
-        print "Invalid id parameter"
+    if not os.path.isfile(src):
+        print "Source file not found:", src
         sys.exit(1)
-
-    target = int(opt.split("=")[1])
 
     data = json.loads(open(src,"rb").read().decode("utf-8"))
 
@@ -130,7 +134,7 @@ def main():
             break
 
     if not obj:
-        print "ID not found"
+        print "ID not found:", target
         sys.exit(1)
 
     anonymise_rawsource(obj.get("RawSource",{}))
