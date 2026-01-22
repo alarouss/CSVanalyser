@@ -1,110 +1,144 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Python 2.6 compatible
+import json, sys, re
 
-import sys
-import json
-import re
-
+# ---------- mappings globaux ----------
 HOST_MAP = {}
-HOST_SEQ = 1
+SCAN_MAP = {}
+CNAME_MAP = {}
+DB_MAP = {}
+SERVICE_MAP = {}
 
-IP_RE = re.compile(r'\b\d{1,3}(\.\d{1,3}){3}\b', re.I)
-HOST_RE = re.compile(r'\b([A-Za-z0-9\-_]+\.[A-Za-z0-9\.\-_]+|\b[A-Za-z0-9\-_]+scan[A-Za-z0-9\-_]*|\b[A-Za-z0-9\-_]+)\b', re.I)
+HOST_C = 1
+SCAN_C = 1
+CNAME_C = 1
+DB_C = 1
+SERVICE_C = 1
 
-def new_alias(name):
-    global HOST_SEQ
-    alias = None
+def map_value(val, prefix, store):
+    global HOST_C, SCAN_C, CNAME_C, DB_C, SERVICE_C
 
-    low = name.lower()
-
-    if "scan" in low:
-        alias = "SCAN_%d" % HOST_SEQ
-    else:
-        alias = "HOST_%d" % HOST_SEQ
-
-    HOST_SEQ += 1
-    return alias
-
-def anonymize_value(val):
     if not val:
         return val
 
-    if not isinstance(val, basestring):
-        return val
+    if val in store:
+        return store[val]
 
-    txt = val
+    if prefix == "HOST":
+        alias = "HOST_%d" % HOST_C
+        HOST_C += 1
+    elif prefix == "SCAN":
+        alias = "SCAN_%d" % SCAN_C
+        SCAN_C += 1
+    elif prefix == "CNAME":
+        alias = "CNAME_%d" % CNAME_C
+        CNAME_C += 1
+    elif prefix == "DB":
+        alias = "DB_%d" % DB_C
+        DB_C += 1
+    elif prefix == "SRV":
+        alias = "SRV_%d" % SERVICE_C
+        SERVICE_C += 1
+    else:
+        alias = prefix + "_X"
 
-    # IP anonymisation
-    txt = IP_RE.sub("X.X.X.X", txt)
+    store[val] = alias
+    return alias
 
-    # Host / FQDN anonymisation
-    def repl(m):
-        name = m.group(0)
+# ---------------------------------------------------
+def anonymise_text(txt):
+    if not txt:
+        return txt
 
-        if name.lower().startswith("jdbc"):
-            return name
+    # Ports
+    txt = re.sub(r'\b\d{4,5}\b', "XXXX", txt)
 
-        if name not in HOST_MAP:
-            HOST_MAP[name] = new_alias(name)
-
-        return HOST_MAP[name]
-
-    txt = HOST_RE.sub(repl, txt)
+    # HOST patterns
+    for h in re.findall(r'[A-Za-z0-9._-]+', txt):
+        if "." in h or "scan" in h.lower() or "host" in h.lower():
+            alias = map_value(h, "HOST", HOST_MAP)
+            txt = txt.replace(h, "{%s}" % alias)
 
     return txt
 
-def anonymize_obj(obj):
-    if isinstance(obj, dict):
-        out = {}
-        for k, v in obj.items():
-            out[k] = anonymize_obj(v)
-        return out
+# ---------------------------------------------------
+def anonymise_rawsource(rs):
 
-    if isinstance(obj, list):
-        return [anonymize_obj(x) for x in obj]
+    for k in rs:
+        v = rs[k]
+        if not v:
+            continue
+        rs[k] = anonymise_text(v)
 
-    return anonymize_value(obj)
+# ---------------------------------------------------
+def anonymise_network(net):
 
-# ------------------------------------------------
+    for sec in net:
+        blk = net.get(sec)
+        if not blk:
+            continue
 
-def parse_args():
-    src = None
-    idv = None
+        if blk.get("host"):
+            blk["host"] = map_value(blk["host"], "HOST", HOST_MAP)
 
-    for a in sys.argv[1:]:
-        if a.startswith("source="):
-            src = a.split("=",1)[1]
-        if a.startswith("id="):
-            idv = int(a.split("=",1)[1])
+        if blk.get("cname"):
+            blk["cname"] = map_value(blk["cname"], "CNAME", CNAME_MAP)
 
-    return src, idv
+        if blk.get("scan"):
+            blk["scan"] = map_value(blk["scan"], "SCAN", SCAN_MAP)
 
-# ------------------------------------------------
+        if blk.get("port"):
+            blk["port"] = "XXXX"
 
-if __name__ == "__main__":
+# ---------------------------------------------------
+def anonymise_status(st):
 
-    src, idv = parse_args()
+    for k in ("ErrorDetail","OEMErrorDetail"):
+        if st.get(k):
+            txt = st[k]
 
-    if not src or not idv:
-        print "Usage:"
-        print "  python AnonymiseID.py source=/path/file.json id=5"
+            for h, a in HOST_MAP.items():
+                txt = txt.replace(h, "{%s}" % a)
+            for s, a in SCAN_MAP.items():
+                txt = txt.replace(s, "{%s}" % a)
+
+            st[k] = txt
+
+# ---------------------------------------------------
+def main():
+
+    if len(sys.argv) < 3:
+        print "Usage: python AnonymiseID.py source.json id=N"
         sys.exit(1)
 
-    data = json.loads(open(src,"rb").read())
+    src = sys.argv[1]
+    opt = sys.argv[2]
 
-    found = None
+    if not opt.startswith("id="):
+        print "Invalid id parameter"
+        sys.exit(1)
+
+    target = int(opt.split("=")[1])
+
+    data = json.loads(open(src,"rb").read().decode("utf-8"))
+
+    obj = None
     for o in data.get("objects",[]):
-        if o.get("id") == idv:
-            found = o
+        if o.get("id")==target:
+            obj = o
             break
 
-    if not found:
-        print "ID not found:", idv
+    if not obj:
+        print "ID not found"
         sys.exit(1)
 
-    anon = anonymize_obj(found)
+    anonymise_rawsource(obj.get("RawSource",{}))
+    anonymise_network(obj.get("Network",{}))
+    anonymise_status(obj.get("Status",{}))
 
-    print json.dumps(anon, indent=2, ensure_ascii=False)
+    print json.dumps(obj, indent=2, ensure_ascii=False).encode("utf-8")
 
+# ---------------------------------------------------
+if __name__=="__main__":
+    main()
