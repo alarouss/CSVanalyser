@@ -15,6 +15,7 @@ import tempfile
 from Lib.common import ustr
 from Lib.config import load_main_conf
 from Lib.store import load_store, save_store, build_index
+from Lib.jdbc_raw import interpret_raw_jdbc
 
 CONF_FILE = os.path.join("Data", "config.conf")
 DEBUG = False
