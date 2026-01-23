@@ -300,7 +300,8 @@ def main():
     from Lib.anon_ports    import apply as anon_ports
     from Lib.anon_services import apply as anon_services
     from Lib.anon_jdbc     import apply as anon_jdbc
-
+    from Lib.anon_lock import apply as anon_lock
+  
     out_objects = []
     changed = 0
 
@@ -320,7 +321,8 @@ def main():
         obj = anon_ports(obj, oid)    # ETAPE 3
         obj = anon_services(obj, oid) # ETAPE 4
         obj = anon_jdbc(obj, oid)     # ETAPE 5
-
+        obj = anon_lock(obj, oid)     # ETAPE 6
+      
         after = json.dumps(obj, sort_keys=True)
         if before != after:
             changed += 1
