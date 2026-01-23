@@ -318,11 +318,15 @@ if __name__ == "__main__":
 
     oem_conn = read_oem_conn(OEM_CONF_FILE)
 
-    rows = [normalize_row(r)
-        for r in csv.DictReader(
+    rows = []
+    for r in csv.DictReader(
             codecs.open(fichier, "r", "utf-8", errors="ignore"),
             delimiter=';'
-        )]
+        ):
+        rows.append({
+            "__RAW_CSV__": dict(r),          # 🔴 CSV brut (debug)
+            "__ROW_NORM__": normalize_row(r) # 🟢 version actuelle
+        })
 
     if option == "columns":
         if not rows:
