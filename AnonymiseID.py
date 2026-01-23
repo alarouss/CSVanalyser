@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-#retour
+# retour
 """
 AnonymiseID.py
 Anonymisation ciblée par ID du store AnalyseV3
@@ -45,18 +45,26 @@ def parse_ids(ids, max_id):
 def anonymize_rawsource(raw, obj_id):
     repl = {}
 
-    if "Application" in raw:
+    # Application
+    if "Application" in raw and raw["Application"]:
         repl[raw["Application"]] = "App_%d" % obj_id
 
-    if "Databases" in raw:
+    # Databases
+    if "Databases" in raw and raw["Databases"]:
         repl[raw["Databases"]] = "DatabaseName_%d" % obj_id
 
-    if "Cnames" in raw:
+    # Placeholder {DATABASENAME}
+    repl["{DATABASENAME}"] = "DatabaseName_%d" % obj_id
+
+    # Cnames
+    if "Cnames" in raw and raw["Cnames"]:
         repl[raw["Cnames"]] = "CNames_%d" % obj_id
 
-    if "Cnames DR" in raw:
+    # Cnames DR
+    if "Cnames DR" in raw and raw["Cnames DR"]:
         repl[raw["Cnames DR"]] = "CNamesDR_%d" % obj_id
 
+    # Ports (ex: 1521)
     repl["1521"] = "PORT_%d" % obj_id
 
     out = {}
@@ -144,12 +152,14 @@ def main():
             obj["RawSource"] = anonymize_rawsource(obj["RawSource"], oid)
 
         if "Network" in obj:
-            obj["Network"] = anonymize_network(obj["Network"], oid,
-                                                host_map, scan_map)
+            obj["Network"] = anonymize_network(
+                obj["Network"], oid, host_map, scan_map
+            )
 
         if "OEM" in obj:
-            obj["OEM"] = anonymize_oem(obj["OEM"], oid,
-                                       host_map, scan_map)
+            obj["OEM"] = anonymize_oem(
+                obj["OEM"], oid, host_map, scan_map
+            )
 
     base, ext = os.path.splitext(src)
     out = base + "_anon.json"
