@@ -287,8 +287,10 @@ def build_object_v3(row, obj_id, store_index, force_update, oem_conn, pos, total
     # IMPORTANT: rendre OEM visible pour ReportV3 (racine + Network)
     raw_debug = {}
     raw_csv = row.get("__RAW_CSV__", {})
-        for k, v in raw_csv.items():
-    raw_debug[ustr(k)] = ustr(v)
+    
+    for k, v in raw_csv.items():
+        raw_debug[ustr(k)] = ustr(v)
+    
     obj = {
         "id": obj_id,
         "RawSource": raw,
@@ -297,6 +299,7 @@ def build_object_v3(row, obj_id, store_index, force_update, oem_conn, pos, total
         "Status": status,
         "OEM": net.get("OEM")
     }
+    
     return obj
 
 # ------------------------------------------------
