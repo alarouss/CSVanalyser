@@ -10,7 +10,7 @@ from Lib.anon_ports    import apply as anon_ports
 from Lib.anon_services import apply as anon_services
 from Lib.anon_jdbc     import apply as anon_jdbc
 from Lib.anon_lock     import apply as anon_lock
-from Lib.anon_guard    import apply as anon_guard
+#from Lib.anon_guard    import apply as anon_guard
 
 PIPELINE = [
     anon_dbname,
