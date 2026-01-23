@@ -285,7 +285,7 @@ def anonymize_object(obj, oid):
 # ------------------------------------------------
 def main():
     src, ids_arg = parse_args(sys.argv)
-    if (not src) or (not ids_arg) or (not os.path.isfile(src)):
+    if not src or not ids_arg or not os.path.isfile(src):
         print "Usage: python AnonymiseID.py source=store.json id=1,2|ALL"
         sys.exit(1)
 
@@ -294,20 +294,18 @@ def main():
 
     ids = parse_ids(ids_arg, len(objects))
 
-    new_objects = []
     for obj in objects:
         try:
             oid = int(obj.get("id"))
         except:
-            new_objects.append(obj)
             continue
 
-        if oid in ids:
-            new_objects.append(anonymize_object(obj, oid))
-        else:
-            new_objects.append(obj)
+        if oid not in ids:
+            continue
 
-    data["objects"] = new_objects
+        # ÉTAPE 1 — modification minimale et visible
+        if "RawSource" in obj and "Databases" in obj["RawSource"]:
+            obj["RawSource"]["Databases"] = "DBNAME_%d" % oid
 
     base, ext = os.path.splitext(src)
     out = base + "_anon.json"
@@ -316,7 +314,8 @@ def main():
         json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
     )
 
-    print "Anonymisation terminee :", out
+    print "Anonymisation (ETAPE 1) terminée :", out
+
 
 # ------------------------------------------------
 if __name__ == "__main__":
