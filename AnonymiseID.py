@@ -283,10 +283,10 @@ def anonymize_object(obj, oid):
     return walk(obj)
 
 # ------------------------------------------------
-#V5
+#V6
 def main():
     src, ids_arg = parse_args(sys.argv)
-    if not src or not ids_arg or not os.path.isfile(src):
+    if not src or not os.path.isfile(src):
         print "Usage: python AnonymiseID.py source=store.json id=1,2|ALL"
         sys.exit(1)
 
@@ -295,70 +295,11 @@ def main():
 
     ids = parse_ids(ids_arg, len(objects))
 
+    # import local, aucune dépendance croisée
+    from Lib.anon_dbname import apply as anon_dbname
+
     out_objects = []
-
-    def replace_everywhere(node, old, new):
-        if isinstance(node, dict):
-            return dict((k, replace_everywhere(v, old, new))
-                        for k, v in node.items())
-        if isinstance(node, list):
-            return [replace_everywhere(x, old, new) for x in node]
-        if isinstance(node, basestring):
-            return node.replace(old, new)
-        return node
-
-    def anonymize_hosts_in_object(obj, oid):
-        host_map = {}
-        seq = [0]
-
-        def map_host(v):
-            if not v:
-                return v
-            vv = v.strip()
-            if not vv:
-                return v
-            if vv not in host_map:
-                seq[0] += 1
-                host_map[vv] = "Host_%d_%d" % (oid, seq[0])
-            return host_map[vv]
-
-        def walk(node):
-            if isinstance(node, dict):
-                out = {}
-                for k, v in node.items():
-                    if k in ("host", "cname", "scan") and isinstance(v, basestring):
-                        out[k] = map_host(v)
-                    elif k in ("Cnames", "Cnames DR") and isinstance(v, basestring):
-                        out[k] = map_host(v)
-                    else:
-                        out[k] = walk(v)
-                return out
-            if isinstance(node, list):
-                return [walk(x) for x in node]
-            return node
-
-        return walk(obj)
-
-    def anonymize_ports_in_object(obj, oid):
-        port_token = "PORT_%d" % oid
-
-        def walk(node):
-            if isinstance(node, dict):
-                out = {}
-                for k, v in node.items():
-                    if k == "port" and isinstance(v, basestring) and v.isdigit():
-                        out[k] = port_token
-                    else:
-                        out[k] = walk(v)
-                return out
-            if isinstance(node, list):
-                return [walk(x) for x in node]
-            if isinstance(node, basestring):
-                # remplace ports numériques usuels dans les chaînes
-                return node.replace("1521", port_token)
-            return node
-
-        return walk(obj)
+    changed = 0
 
     for obj in objects:
         try:
@@ -366,35 +307,39 @@ def main():
         except:
             continue
 
+        # 👉 on NE GARDE QUE les IDs demandés
         if oid not in ids:
             continue
 
-        # ----- ETAPE 2 : DBNAME -----
-        if "RawSource" in obj and "Databases" in obj["RawSource"]:
-            old_db = obj["RawSource"]["Databases"]
-            new_db = "DBNAME_%d" % oid
-            obj["RawSource"]["Databases"] = new_db
-            obj = replace_everywhere(obj, old_db, new_db)
+        before = json.dumps(obj, sort_keys=True)
 
-        # ----- ETAPE 3 : HOSTS -----
-        obj = anonymize_hosts_in_object(obj, oid)
+        # 👉 ÉTAPE 1 UNIQUEMENT : DBNAME
+        obj = anon_dbname(obj, oid)
 
-        # ----- ETAPE 4 : PORTS -----
-        obj = anonymize_ports_in_object(obj, oid)
+        after = json.dumps(obj, sort_keys=True)
+        if before != after:
+            changed += 1
+            print "DEBUG id=%d: Databases anonymized -> DBNAME_%d" % (oid, oid)
 
         out_objects.append(obj)
 
-    out_data = {"objects": out_objects}
+    # sortie = uniquement les objets traités
+    out = {
+        "objects": out_objects
+    }
 
     base, ext = os.path.splitext(src)
-    out = base + "_anon.json"
+    out_file = base + "_anon.json"
 
-    open(out, "wb").write(
-        json.dumps(out_data, indent=2, ensure_ascii=False).encode("utf-8")
+    open(out_file, "wb").write(
+        json.dumps(out, indent=2, ensure_ascii=False).encode("utf-8")
     )
 
-    print "Anonymisation (ETAPE 4 - PORTS) terminee :", out
-    print "IDs exportes :", [o.get("id") for o in out_objects]
+    print
+    print "Anonymisation (ETAPE 1 - DBNAME) terminee"
+    print "  objects traites :", len(out_objects)
+    print "  objets modifies :", changed
+    print "  fichier :", out_file
 
 # ------------------------------------------------
 if __name__ == "__main__":
