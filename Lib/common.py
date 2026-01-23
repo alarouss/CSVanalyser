@@ -18,18 +18,21 @@ ANSI_RE = re.compile(r'\x1b\[[0-9;]*m')
 def strip_ansi(s):
     return ANSI_RE.sub('', s or "")
 
+
 def ustr(v):
     if v is None:
         return u""
     if isinstance(v, unicode):
         return v
-    try:
-        return unicode(v, "utf-8")
-    except:
+    for enc in ("utf-8", "latin1", "cp1252"):
         try:
-            return unicode(str(v), "utf-8", "ignore")
+            return unicode(v, enc)
         except:
-            return u""
+            pass
+    try:
+        return unicode(str(v), "utf-8", "ignore")
+    except:
+        return u""
 
 def pad(val, width):
     txt = ustr(val)
