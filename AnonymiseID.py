@@ -283,6 +283,7 @@ def anonymize_object(obj, oid):
     return walk(obj)
 
 # ------------------------------------------------
+#V3
 def main():
     src, ids_arg = parse_args(sys.argv)
     if not src or not ids_arg or not os.path.isfile(src):
@@ -296,23 +297,45 @@ def main():
 
     out_objects = []
 
-    def anonymize_hosts(obj, oid):
+    def replace_everywhere(node, old, new):
+        if isinstance(node, dict):
+            return dict((k, replace_everywhere(v, old, new))
+                        for k, v in node.items())
+        if isinstance(node, list):
+            return [replace_everywhere(x, old, new) for x in node]
+        if isinstance(node, basestring):
+            return node.replace(old, new)
+        return node
+
+    def anonymize_hosts_in_object(obj, oid):
+        """
+        Anonymise les valeurs des clés: host, cname, scan (Network/OEM)
+        + RawSource: Cnames, Cnames DR
+        Stabilité intra-objet: même valeur -> même Host_<ID>_<SEQ>
+        """
         host_map = {}
         seq = [0]
 
-        def map_host(h):
-            if not h:
-                return h
-            if h not in host_map:
+        def map_host(v):
+            if v is None:
+                return v
+            vv = v.strip()
+            if not vv:
+                return v
+            if vv not in host_map:
                 seq[0] += 1
-                host_map[h] = "Host_%d_%d" % (oid, seq[0])
-            return host_map[h]
+                host_map[vv] = "Host_%d_%d" % (oid, seq[0])
+            return host_map[vv]
 
         def walk(node):
             if isinstance(node, dict):
                 out = {}
                 for k, v in node.items():
-                    if k in ("host", "cname") and isinstance(v, basestring):
+                    # Network/OEM blocks
+                    if k in ("host", "cname", "scan") and isinstance(v, basestring):
+                        out[k] = map_host(v)
+                    # RawSource specific fields that carry host-like values
+                    elif k in ("Cnames", "Cnames DR") and isinstance(v, basestring):
                         out[k] = map_host(v)
                     else:
                         out[k] = walk(v)
@@ -332,9 +355,18 @@ def main():
         if oid not in ids:
             continue
 
-        print "DEBUG id=%d anonymize hosts" % oid
+        # ----- ETAPE 2 (DBNAME propagation) -----
+        if "RawSource" in obj and "Databases" in obj["RawSource"]:
+            old_db = obj["RawSource"]["Databases"]
+            new_db = "DBNAME_%d" % oid
 
-        obj = anonymize_hosts(obj, oid)
+            # Met à jour Databases
+            obj["RawSource"]["Databases"] = new_db
+            # Propage partout dans l'objet (RawSource/Network/OEM/etc.)
+            obj = replace_everywhere(obj, old_db, new_db)
+
+        # ----- ETAPE 3 (hosts anonymization incl. scan/cnames/cnames dr) -----
+        obj = anonymize_hosts_in_object(obj, oid)
 
         out_objects.append(obj)
 
@@ -347,7 +379,7 @@ def main():
         json.dumps(out_data, indent=2, ensure_ascii=False).encode("utf-8")
     )
 
-    print "Anonymisation (ETAPE 3) terminee :", out
+    print "Anonymisation (ETAPE 2+3) terminee :", out
     print "IDs exportes :", [o.get("id") for o in out_objects]
 
 # ------------------------------------------------
