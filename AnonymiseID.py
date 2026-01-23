@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# retour 1
+#retour 3
 """
 AnonymiseID.py
 Anonymisation ciblée par ID du store AnalyseV3
@@ -13,121 +13,128 @@ Usage:
 import json
 import sys
 import os
+import re
 
 # ------------------------------------------------
 def parse_args(argv):
     src = None
     ids = None
-
     for a in argv[1:]:
         if a.startswith("source="):
             src = a.split("=", 1)[1]
         elif a.startswith("id="):
             ids = a.split("=", 1)[1]
-
-    if not src or not ids:
-        return None, None
-
     return src, ids
 
 # ------------------------------------------------
 def parse_ids(ids, max_id):
     if ids.upper() == "ALL":
         return range(1, max_id + 1)
-    out = []
-    for p in ids.split(","):
-        p = p.strip()
-        if p:
-            out.append(int(p))
+    return [int(x.strip()) for x in ids.split(",") if x.strip()]
+
+# ------------------------------------------------
+def make_seq_mapper(prefix, obj_id):
+    seq = [0]
+    mapping = {}
+
+    def map_value(v):
+        if v not in mapping:
+            seq[0] += 1
+            mapping[v] = "%s_%d_%d" % (prefix, obj_id, seq[0])
+        return mapping[v]
+
+    return map_value
+
+# ------------------------------------------------
+def anonymize_string(s, repl):
+    out = s
+    for a, b in repl.items():
+        out = out.replace(a, b)
     return out
 
 # ------------------------------------------------
-def anonymize_rawsource(raw, obj_id):
-    repl = {}
+def anonymize_rawsource(raw, obj_id, host_map, cname_map):
+    out = {}
 
-    # Application
-    if "Application" in raw and raw["Application"]:
-        repl[raw["Application"]] = "App_%d" % obj_id
+    dbname = "DBNAME_%d" % obj_id
+    repl = {
+        "{DATABASENAME}": dbname,
+        "1521": "PORT_%d" % obj_id
+    }
 
-    # Databases
-    if "Databases" in raw and raw["Databases"]:
-        repl[raw["Databases"]] = "DatabaseName_%d" % obj_id
+    if "Application" in raw:
+        repl[raw["Application"]] = "APP_%d" % obj_id
 
-    # Placeholder {DATABASENAME}
-    repl["{DATABASENAME}"] = "DatabaseName_%d" % obj_id
+    if "Databases" in raw:
+        repl[raw["Databases"]] = dbname
 
-    # Cnames
-    if "Cnames" in raw and raw["Cnames"]:
+    if "Cnames" in raw:
         repl[raw["Cnames"]] = "CNames_%d" % obj_id
 
-    # Cnames DR
-    if "Cnames DR" in raw and raw["Cnames DR"]:
+    if "Cnames DR" in raw:
         repl[raw["Cnames DR"]] = "CNamesDR_%d" % obj_id
 
-    # Ports (ex: 1521)
-    repl["1521"] = "PORT_%d" % obj_id
-
-    out = {}
     for k, v in raw.items():
-        if isinstance(v, basestring):
-            nv = v
-            for a, b in repl.items():
-                nv = nv.replace(a, b)
-            out[k] = nv
+        if not isinstance(v, basestring):
+            out[k] = v
+            continue
+
+        nv = anonymize_string(v, repl)
+
+        # anonymiser tout ce qui est entre '=' et ')'
+        def _eq_paren(m):
+            return "=" + host_map(m.group(1)) + ")"
+
+        nv = re.sub(r"=([^)=]+)\)", _eq_paren, nv)
+
+        # anonymiser host après '@'
+        nv = re.sub(
+            r'@([^:/]+)',
+            lambda m: '@' + host_map(m.group(1)),
+            nv
+        )
+
+        # anonymiser node -> DBNAME_ID_NODE
+        nv = re.sub(
+            r'/[^/"]+',
+            '/' + dbname + '_NODE',
+            nv
+        )
+
+        # services SRV_xxx_DBNAME
+        nv = re.sub(
+            r'(SRV_[A-Z0-9_]+)_.*',
+            r'\1_' + dbname,
+            nv
+        )
+
+        out[k] = nv
+
+    return out, dbname
+
+# ------------------------------------------------
+def anonymize_dict_block(block, obj_id, host_map, scan_map):
+    out = {}
+    for k, v in block.items():
+        if isinstance(v, dict):
+            out[k] = anonymize_dict_block(v, obj_id, host_map, scan_map)
+        elif isinstance(v, basestring):
+            if k in ("host", "cname"):
+                out[k] = host_map(v)
+            elif k == "scan":
+                out[k] = scan_map(v)
+            elif k == "port":
+                out[k] = "PORT_%d" % obj_id
+            else:
+                out[k] = v
         else:
             out[k] = v
     return out
 
 # ------------------------------------------------
-def anonymize_network(net, obj_id, host_map, scan_map):
-    out = {}
-    for zone, data in net.items():
-        if not isinstance(data, dict):
-            out[zone] = data
-            continue
-
-        d = {}
-        for k, v in data.items():
-            if k in ("host", "cname") and v:
-                if v not in host_map:
-                    host_map[v] = "HOST_%d" % (len(host_map) + 1)
-                d[k] = host_map[v]
-            elif k == "scan" and v:
-                if v not in scan_map:
-                    scan_map[v] = "SCAN_%d" % (len(scan_map) + 1)
-                d[k] = scan_map[v]
-            elif k == "port" and v:
-                d[k] = "PORT_%d" % obj_id
-            else:
-                d[k] = v
-        out[zone] = d
-    return out
-
-# ------------------------------------------------
-def anonymize_oem(oem, obj_id, host_map, scan_map):
-    if not isinstance(oem, dict):
-        return oem
-
-    d = {}
-    for k, v in oem.items():
-        if k in ("host", "cname") and v:
-            if v not in host_map:
-                host_map[v] = "HOST_%d" % (len(host_map) + 1)
-            d[k] = host_map[v]
-        elif k == "scan" and v:
-            if v not in scan_map:
-                scan_map[v] = "SCAN_%d" % (len(scan_map) + 1)
-            d[k] = scan_map[v]
-        elif k == "port" and v:
-            d[k] = "PORT_%d" % obj_id
-        else:
-            d[k] = v
-    return d
-
-# ------------------------------------------------
 def main():
     src, ids_arg = parse_args(sys.argv)
-    if not src or not os.path.isfile(src):
+    if not src or not ids_arg or not os.path.isfile(src):
         print "Usage: python AnonymiseID.py source=store.json id=1,2|ALL"
         sys.exit(1)
 
@@ -135,9 +142,6 @@ def main():
     objects = data.get("objects", [])
 
     ids = parse_ids(ids_arg, len(objects))
-
-    host_map = {}
-    scan_map = {}
 
     for obj in objects:
         try:
@@ -148,16 +152,22 @@ def main():
         if oid not in ids:
             continue
 
+        host_map = make_seq_mapper("Host", oid)
+        scan_map = make_seq_mapper("SCAN", oid)
+        cname_map = make_seq_mapper("CNames", oid)
+
         if "RawSource" in obj:
-            obj["RawSource"] = anonymize_rawsource(obj["RawSource"], oid)
+            obj["RawSource"], dbname = anonymize_rawsource(
+                obj["RawSource"], oid, host_map, cname_map
+            )
 
         if "Network" in obj:
-            obj["Network"] = anonymize_network(
+            obj["Network"] = anonymize_dict_block(
                 obj["Network"], oid, host_map, scan_map
             )
 
         if "OEM" in obj:
-            obj["OEM"] = anonymize_oem(
+            obj["OEM"] = anonymize_dict_block(
                 obj["OEM"], oid, host_map, scan_map
             )
 
