@@ -401,16 +401,17 @@ if __name__ == "__main__":
             continue
         pos += 1
         row_pack = rows[obj_id - 1]
-        objs.append(build_object_v3(
-            row_pack["__ROW_NORM__"],   # logique actuelle
-            obj_id,
-            index,
-            force_update,
-            oem_conn,
-            pos,
-            total,
-            raw_debug=row_pack["__RAW_CSV__"]  # 🔴 NOUVEAU
-        ))
+        objs.append(
+            build_object_v3(
+                row_pack,
+                obj_id,
+                index,
+                force_update,
+                oem_conn,
+                pos,
+                total
+            )
+        )
 
 
     sys.stdout.write("\n")
