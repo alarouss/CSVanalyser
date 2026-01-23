@@ -283,7 +283,7 @@ def anonymize_object(obj, oid):
     return walk(obj)
 
 # ------------------------------------------------
-#V9
+#V10
 def main():
     src, ids_arg = parse_args(sys.argv)
     if not src or not os.path.isfile(src):
@@ -295,11 +295,11 @@ def main():
 
     ids = parse_ids(ids_arg, len(objects))
 
-    # === imports explicites ===
     from Lib.anon_dbname   import apply as anon_dbname
     from Lib.anon_hosts    import apply as anon_hosts
     from Lib.anon_ports    import apply as anon_ports
     from Lib.anon_services import apply as anon_services
+    from Lib.anon_jdbc     import apply as anon_jdbc
 
     out_objects = []
     changed = 0
@@ -315,28 +315,20 @@ def main():
 
         before = json.dumps(obj, sort_keys=True)
 
-        # ETAPE 1 : DBNAME
-        obj = anon_dbname(obj, oid)
-
-        # ETAPE 2 : HOST / CNAME / SCAN
-        obj = anon_hosts(obj, oid)
-
-        # ETAPE 3 : PORTS
-        obj = anon_ports(obj, oid)
-
-        # ETAPE 4 : SERVICES
-        obj = anon_services(obj, oid)
+        obj = anon_dbname(obj, oid)   # ETAPE 1
+        obj = anon_hosts(obj, oid)    # ETAPE 2
+        obj = anon_ports(obj, oid)    # ETAPE 3
+        obj = anon_services(obj, oid) # ETAPE 4
+        obj = anon_jdbc(obj, oid)     # ETAPE 5
 
         after = json.dumps(obj, sort_keys=True)
         if before != after:
             changed += 1
-            print "DEBUG id=%d: DBNAME + HOSTS + PORTS + SERVICES anonymised" % oid
+            print "DEBUG id=%d: ETAPES 1 a 5 anonymised" % oid
 
         out_objects.append(obj)
 
-    out = {
-        "objects": out_objects
-    }
+    out = {"objects": out_objects}
 
     base, ext = os.path.splitext(src)
     out_file = base + "_anon.json"
@@ -346,7 +338,7 @@ def main():
     )
 
     print
-    print "Anonymisation terminee (ETAPES 1 a 4)"
+    print "Anonymisation terminee (ETAPES 1 a 5)"
     print "  objects traites :", len(out_objects)
     print "  objets modifies :", changed
     print "  fichier :", out_file
