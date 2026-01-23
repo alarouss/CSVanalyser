@@ -1,62 +1,88 @@
 # -*- coding: utf-8 -*-
 # Lib/anon_jdbc.py
 #
-# ETAPE 5 : anonymisation JDBC fine-grain
-# - cible uniquement les chaînes JDBC / SQLNet
-# - anonymise les paramètres =... ) non couverts par ETAPES 1-4
-# - normalise le node en DBNAME_<ID>_NODE pour la forme simple
+# ETAPE 5 – JDBC fine grain (corrigée)
+# - anonymise TOUS les hosts après @
+# - respecte les mappings existants (Host_<ID>_<SEQ>)
+# - ne crée PAS de nouveaux hosts
 
 import re
 
-# repère une JDBC simple
-SIMPLE_JDBC_RE = re.compile(r'(jdbc:oracle:thin:@)([^:/\s]+):([^/\s]+)/([^\s",)]+)', re.I)
+# JDBC simple : @host:port/xxx
+SIMPLE_JDBC_RE = re.compile(r'(@)([^:/\s",]+)(:)', re.I)
 
-# repère paramètres SQLNet X=VALUE)
+# SQLNet : HOST=xxx)
+SQLNET_HOST_RE = re.compile(r'(HOST=)([^)]+)(\))', re.I)
+
+# paramètres SQLNet génériques X=VALUE)
 SQLNET_PARAM_RE = re.compile(r'([A-Z_]+)=([^)]+)\)', re.I)
 
-PROTECTED_KEYS = set([
-    'HOST', 'PORT', 'SERVICE_NAME'
-])
+PROTECTED_KEYS = set(['HOST', 'PORT', 'SERVICE_NAME'])
 
 def apply(obj, oid):
     if not isinstance(obj, dict):
         return obj
 
-    dbname = "DBNAME_%d" % oid
-    port = "PORT_%d" % oid
+    # récupération des hosts déjà anonymisés (ETAPE 2)
+    known_hosts = {}
 
-    def anon_sqlnet(s):
+    def collect_hosts(n):
+        if isinstance(n, dict):
+            for v in n.values():
+                collect_hosts(v)
+        elif isinstance(n, list):
+            for x in n:
+                collect_hosts(x)
+        elif isinstance(n, basestring):
+            for h in re.findall(r'Host_\d+_\d+', n):
+                known_hosts[h] = h
+
+    collect_hosts(obj)
+
+    def anon_host(val):
+        # si déjà anonymisé → on ne touche pas
+        if re.match(r'Host_\d+_\d+', val):
+            return val
+
+        # sinon, on prend le premier host connu
+        if known_hosts:
+            return sorted(known_hosts.keys())[0]
+
+        # fallback (ne devrait jamais arriver)
+        return "Host_%d_1" % oid
+
+    def anon_string(s):
+        # JDBC simple
+        s = SIMPLE_JDBC_RE.sub(
+            lambda m: m.group(1) + anon_host(m.group(2)) + m.group(3),
+            s
+        )
+
+        # SQLNet HOST=
+        s = SQLNET_HOST_RE.sub(
+            lambda m: m.group(1) + anon_host(m.group(2)) + m.group(3),
+            s
+        )
+
+        # autres paramètres SQLNet
         def repl(m):
-            key = m.group(1).upper()
-            val = m.group(2)
-            if key in PROTECTED_KEYS:
-                return "%s=%s)" % (key, val)
-            return "%s=VAL_%d)" % (key, oid)
-        return SQLNET_PARAM_RE.sub(repl, s)
+            k = m.group(1).upper()
+            v = m.group(2)
+            if k in PROTECTED_KEYS:
+                return "%s=%s)" % (k, v)
+            return "%s=VAL_%d)" % (k, oid)
 
-    def anon_simple(s):
-        def repl(m):
-            return "%s%s:%s/%s_NODE" % (
-                m.group(1),
-                m.group(2),
-                port,
-                dbname
-            )
-        return SIMPLE_JDBC_RE.sub(repl, s)
+        s = SQLNET_PARAM_RE.sub(repl, s)
+        return s
 
-    def walk(node):
-        if isinstance(node, dict):
-            return dict((k, walk(v)) for k, v in node.items())
-
-        if isinstance(node, list):
-            return [walk(x) for x in node]
-
-        if isinstance(node, basestring):
-            if "jdbc:oracle:thin:@" in node.lower():
-                node = anon_simple(node)
-                node = anon_sqlnet(node)
-            return node
-
-        return node
+    def walk(n):
+        if isinstance(n, dict):
+            return dict((k, walk(v)) for k, v in n.items())
+        if isinstance(n, list):
+            return [walk(x) for x in n]
+        if isinstance(n, basestring):
+            if "jdbc:oracle:thin:@" in n.lower():
+                return anon_string(n)
+        return n
 
     return walk(obj)
