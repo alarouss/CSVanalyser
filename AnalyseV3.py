@@ -5,6 +5,7 @@ import csv
 import sys
 import time
 import os
+import codecs
 
 from Lib.common import ustr
 from Lib.config import load_main_conf
@@ -317,7 +318,11 @@ if __name__ == "__main__":
 
     oem_conn = read_oem_conn(OEM_CONF_FILE)
 
-    rows = [normalize_row(r) for r in csv.DictReader(open(fichier, "rb"), delimiter=';')]
+    rows = [normalize_row(r)
+        for r in csv.DictReader(
+            codecs.open(fichier, "r", "utf-8", errors="ignore"),
+            delimiter=';'
+        )]
 
     if option == "columns":
         if not rows:
