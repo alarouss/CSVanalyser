@@ -319,15 +319,23 @@ if __name__ == "__main__":
 
     oem_conn = read_oem_conn(OEM_CONF_FILE)
 
+    f = open(fichier, "rb")
+    reader = csv.DictReader(f, delimiter=';')
+    
     rows = []
-    for r in csv.DictReader(
-            codecs.open(fichier, "r", "utf-8", errors="ignore"),
-            delimiter=';'
-        ):
+    for r in reader:
+        # r contient des bytes (py2.6) => on garde une copie brute telle quelle
+        raw_debug = dict(r)
+    
+        # et on normalise comme avant (ustr gère le décodage)
+        raw_norm = normalize_row(r)
+    
         rows.append({
-            "__RAW_CSV__": dict(r),          # 🔴 CSV brut (debug)
-            "__ROW_NORM__": normalize_row(r) # 🟢 version actuelle
+            "__RAW_CSV__": raw_debug,
+            "__ROW_NORM__": raw_norm
         })
+    
+    f.close()
 
     if option == "columns":
         if not rows:
