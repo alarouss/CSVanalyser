@@ -214,7 +214,7 @@ if __name__ == "__main__":
 
     rows = [normalize_row(r)
         for r in csv.DictReader(
-            codecs.open(fichier, "r", "latin-1"),
+            open(fichier, "rb"),   # <-- BINAIRE
             delimiter=';'
         )]
 
