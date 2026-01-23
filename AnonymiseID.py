@@ -294,9 +294,6 @@ def main():
 
     ids = parse_ids(ids_arg, len(objects))
 
-    matched = 0
-    changed = 0
-
     for obj in objects:
         try:
             oid = int(obj.get("id"))
@@ -306,38 +303,32 @@ def main():
         if oid not in ids:
             continue
 
-        matched += 1
-
-        # DEBUG structure
-        if "RawSource" not in obj:
-            print "DEBUG id=%d: RawSource ABSENT" % oid
-            continue
-
-        if "Databases" not in obj["RawSource"]:
-            print "DEBUG id=%d: RawSource present mais Databases ABSENT. Keys=%s" % (
-                oid, ",".join(obj["RawSource"].keys())
+        if "RawSource" in obj and "Databases" in obj["RawSource"]:
+            obj["RawSource"]["Databases"] = "DBNAME_%d" % oid
+            print "DEBUG IN-MEMORY id=%d Databases=%s" % (
+                oid, obj["RawSource"]["Databases"]
             )
-            continue
-
-        # ÉTAPE 1 — modification minimale
-        before = obj["RawSource"]["Databases"]
-        obj["RawSource"]["Databases"] = "DBNAME_%d" % oid
-        after = obj["RawSource"]["Databases"]
-        if before != after:
-            changed += 1
-            print "DEBUG id=%d: Databases '%s' -> '%s'" % (oid, before, after)
-        else:
-            print "DEBUG id=%d: Databases deja identique ('%s')" % (oid, after)
 
     base, ext = os.path.splitext(src)
     out = base + "_anon.json"
+
+    abs_out = os.path.abspath(out)
+    print "DEBUG writing to:", abs_out
 
     open(out, "wb").write(
         json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
     )
 
-    print "DEBUG summary: objects=%d matched_ids=%d changed=%d" % (len(objects), matched, changed)
-    print "Anonymisation (ETAPE 1) terminee :", out
+    # 🔎 RELIRE IMMÉDIATEMENT CE QUI VIENT D’ÊTRE ÉCRIT
+    reread = json.loads(open(out, "rb").read().decode("utf-8"))
+    for obj in reread.get("objects", []):
+        if obj.get("id") in ids:
+            print "DEBUG RE-READ id=%d Databases=%s" % (
+                obj.get("id"),
+                obj.get("RawSource", {}).get("Databases")
+            )
+
+    print "Anonymisation (ETAPE 1) terminee :", abs_out
 
 # ------------------------------------------------
 if __name__ == "__main__":
