@@ -294,6 +294,8 @@ def main():
 
     ids = parse_ids(ids_arg, len(objects))
 
+    out_objects = []
+
     for obj in objects:
         try:
             oid = int(obj.get("id"))
@@ -303,32 +305,28 @@ def main():
         if oid not in ids:
             continue
 
+        # ÉTAPE 1 — modification minimale
         if "RawSource" in obj and "Databases" in obj["RawSource"]:
             obj["RawSource"]["Databases"] = "DBNAME_%d" % oid
-            print "DEBUG IN-MEMORY id=%d Databases=%s" % (
+            print "DEBUG id=%d Databases -> %s" % (
                 oid, obj["RawSource"]["Databases"]
             )
+
+        out_objects.append(obj)
+
+    out_data = {
+        "objects": out_objects
+    }
 
     base, ext = os.path.splitext(src)
     out = base + "_anon.json"
 
-    abs_out = os.path.abspath(out)
-    print "DEBUG writing to:", abs_out
-
     open(out, "wb").write(
-        json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
+        json.dumps(out_data, indent=2, ensure_ascii=False).encode("utf-8")
     )
 
-    # 🔎 RELIRE IMMÉDIATEMENT CE QUI VIENT D’ÊTRE ÉCRIT
-    reread = json.loads(open(out, "rb").read().decode("utf-8"))
-    for obj in reread.get("objects", []):
-        if obj.get("id") in ids:
-            print "DEBUG RE-READ id=%d Databases=%s" % (
-                obj.get("id"),
-                obj.get("RawSource", {}).get("Databases")
-            )
-
-    print "Anonymisation (ETAPE 1) terminee :", abs_out
+    print "Anonymisation (ETAPE 1) terminee :", out
+    print "IDs exportes :", [o.get("id") for o in out_objects]
 
 # ------------------------------------------------
 if __name__ == "__main__":
