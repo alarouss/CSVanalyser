@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# retour
+# retour 1
 """
 AnonymiseID.py
 Anonymisation ciblée par ID du store AnalyseV3
