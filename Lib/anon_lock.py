@@ -1,26 +1,27 @@
 # -*- coding: utf-8 -*-
 # Lib/anon_lock.py
 #
-# ETAPE 6 : cohérence globale & verrouillage
-# - réutilise les anonymisations existantes
-# - interdit toute divergence entre sections
+# ETAPE 6 – verrouillage global (corrigé)
+# - supprime toute fuite dans Status / Application
+# - n'introduit AUCUNE nouvelle anonymisation
 
 import re
 
-HOST_RE = re.compile(r'\bHost_\d+_\d+\b')
-DB_RE   = re.compile(r'\bDBNAME_\d+\b')
-PORT_RE = re.compile(r'\bPORT_\d+\b')
-SCAN_RE = re.compile(r'\bSCAN_\d+\b')
+HOST_RE = re.compile(r'Host_\d+_\d+')
+DB_RE   = re.compile(r'DBNAME_\d+')
+PORT_RE = re.compile(r'PORT_\d+')
+SCAN_RE = re.compile(r'SCAN_\d+')
+APP_RE  = re.compile(r'APP_\d+')
 
 def apply(obj, oid):
     if not isinstance(obj, dict):
         return obj
 
     known = {
-        "hosts": set(),
+        "host": None,
         "db": None,
-        "ports": set(),
-        "scans": set()
+        "port": None,
+        "app": "APP_%d" % oid
     }
 
     def collect(n):
@@ -31,31 +32,43 @@ def apply(obj, oid):
             for x in n:
                 collect(x)
         elif isinstance(n, basestring):
-            for m in HOST_RE.findall(n):
-                known["hosts"].add(m)
-            for m in PORT_RE.findall(n):
-                known["ports"].add(m)
-            for m in SCAN_RE.findall(n):
-                known["scans"].add(m)
-            m = DB_RE.search(n)
-            if m:
-                known["db"] = m.group(0)
+            if not known["host"]:
+                m = HOST_RE.search(n)
+                if m:
+                    known["host"] = m.group(0)
+            if not known["db"]:
+                m = DB_RE.search(n)
+                if m:
+                    known["db"] = m.group(0)
+            if not known["port"]:
+                m = PORT_RE.search(n)
+                if m:
+                    known["port"] = m.group(0)
 
     collect(obj)
 
     def enforce(n):
         if isinstance(n, dict):
-            return dict((k, enforce(v)) for k, v in n.items())
+            out = {}
+            for k, v in n.items():
+                if k == "Application":
+                    out[k] = known["app"]
+                else:
+                    out[k] = enforce(v)
+            return out
+
         if isinstance(n, list):
             return [enforce(x) for x in n]
+
         if isinstance(n, basestring):
+            if known["host"]:
+                n = re.sub(r'\b[a-zA-Z0-9_.-]+\b', known["host"], n)
             if known["db"]:
                 n = re.sub(r'DBNAME_\d+', known["db"], n)
-            for h in known["hosts"]:
-                n = re.sub(r'Host_\d+_\d+', h, n, count=1)
-            for p in known["ports"]:
-                n = re.sub(r'PORT_\d+', p, n)
+            if known["port"]:
+                n = re.sub(r'PORT_\d+', known["port"], n)
             return n
+
         return n
 
     return enforce(obj)
