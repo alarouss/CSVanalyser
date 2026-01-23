@@ -283,7 +283,7 @@ def anonymize_object(obj, oid):
     return walk(obj)
 
 # ------------------------------------------------
-#V3
+#V5
 def main():
     src, ids_arg = parse_args(sys.argv)
     if not src or not ids_arg or not os.path.isfile(src):
@@ -308,16 +308,11 @@ def main():
         return node
 
     def anonymize_hosts_in_object(obj, oid):
-        """
-        Anonymise les valeurs des clés: host, cname, scan (Network/OEM)
-        + RawSource: Cnames, Cnames DR
-        Stabilité intra-objet: même valeur -> même Host_<ID>_<SEQ>
-        """
         host_map = {}
         seq = [0]
 
         def map_host(v):
-            if v is None:
+            if not v:
                 return v
             vv = v.strip()
             if not vv:
@@ -331,10 +326,8 @@ def main():
             if isinstance(node, dict):
                 out = {}
                 for k, v in node.items():
-                    # Network/OEM blocks
                     if k in ("host", "cname", "scan") and isinstance(v, basestring):
                         out[k] = map_host(v)
-                    # RawSource specific fields that carry host-like values
                     elif k in ("Cnames", "Cnames DR") and isinstance(v, basestring):
                         out[k] = map_host(v)
                     else:
@@ -342,6 +335,27 @@ def main():
                 return out
             if isinstance(node, list):
                 return [walk(x) for x in node]
+            return node
+
+        return walk(obj)
+
+    def anonymize_ports_in_object(obj, oid):
+        port_token = "PORT_%d" % oid
+
+        def walk(node):
+            if isinstance(node, dict):
+                out = {}
+                for k, v in node.items():
+                    if k == "port" and isinstance(v, basestring) and v.isdigit():
+                        out[k] = port_token
+                    else:
+                        out[k] = walk(v)
+                return out
+            if isinstance(node, list):
+                return [walk(x) for x in node]
+            if isinstance(node, basestring):
+                # remplace ports numériques usuels dans les chaînes
+                return node.replace("1521", port_token)
             return node
 
         return walk(obj)
@@ -355,18 +369,18 @@ def main():
         if oid not in ids:
             continue
 
-        # ----- ETAPE 2 (DBNAME propagation) -----
+        # ----- ETAPE 2 : DBNAME -----
         if "RawSource" in obj and "Databases" in obj["RawSource"]:
             old_db = obj["RawSource"]["Databases"]
             new_db = "DBNAME_%d" % oid
-
-            # Met à jour Databases
             obj["RawSource"]["Databases"] = new_db
-            # Propage partout dans l'objet (RawSource/Network/OEM/etc.)
             obj = replace_everywhere(obj, old_db, new_db)
 
-        # ----- ETAPE 3 (hosts anonymization incl. scan/cnames/cnames dr) -----
+        # ----- ETAPE 3 : HOSTS -----
         obj = anonymize_hosts_in_object(obj, oid)
+
+        # ----- ETAPE 4 : PORTS -----
+        obj = anonymize_ports_in_object(obj, oid)
 
         out_objects.append(obj)
 
@@ -379,7 +393,7 @@ def main():
         json.dumps(out_data, indent=2, ensure_ascii=False).encode("utf-8")
     )
 
-    print "Anonymisation (ETAPE 2+3) terminee :", out
+    print "Anonymisation (ETAPE 4 - PORTS) terminee :", out
     print "IDs exportes :", [o.get("id") for o in out_objects]
 
 # ------------------------------------------------
