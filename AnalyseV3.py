@@ -178,7 +178,7 @@ def compute_network_block(host, step_prefix, pos, total):
     return net, None, None
 
 # ------------------------------------------------
-def build_object_v3(row, obj_id, store_index, force_update, oem_conn, pos, total):
+def build_object_v3(row, obj_id, store_index, force_update, oem_conn, pos, total, raw_debug=None):
 
     raw = build_raw_source(row)
 
@@ -288,9 +288,10 @@ def build_object_v3(row, obj_id, store_index, force_update, oem_conn, pos, total
     obj = {
         "id": obj_id,
         "RawSource": raw,
+        "OEM": net.get("OEM"),
         "Network": net,
         "Status": status,
-        "OEM": net.get("OEM")  # <-- duplication au niveau racine
+        "RawSource_DEBUG": raw_debug  #  AJOUT UNIQUE
     }
     return obj
 
@@ -390,8 +391,18 @@ if __name__ == "__main__":
         if obj_id < 1 or obj_id > len(rows):
             continue
         pos += 1
-        r = rows[obj_id - 1]
-        objs.append(build_object_v3(r, obj_id, index, force_update, oem_conn, pos, total))
+        row_pack = rows[obj_id - 1]
+        objs.append(build_object_v3(
+            row_pack["__ROW_NORM__"],   # logique actuelle
+            obj_id,
+            index,
+            force_update,
+            oem_conn,
+            pos,
+            total,
+            raw_debug=row_pack["__RAW_CSV__"]  # 🔴 NOUVEAU
+        ))
+
 
     sys.stdout.write("\n")
 
