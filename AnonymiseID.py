@@ -296,6 +296,16 @@ def main():
 
     out_objects = []
 
+    def replace_everywhere(node, old, new):
+        if isinstance(node, dict):
+            return dict((k, replace_everywhere(v, old, new))
+                        for k, v in node.items())
+        if isinstance(node, list):
+            return [replace_everywhere(x, old, new) for x in node]
+        if isinstance(node, basestring):
+            return node.replace(old, new)
+        return node
+
     for obj in objects:
         try:
             oid = int(obj.get("id"))
@@ -305,18 +315,24 @@ def main():
         if oid not in ids:
             continue
 
-        # ÉTAPE 1 — modification minimale
-        if "RawSource" in obj and "Databases" in obj["RawSource"]:
-            obj["RawSource"]["Databases"] = "DBNAME_%d" % oid
-            print "DEBUG id=%d Databases -> %s" % (
-                oid, obj["RawSource"]["Databases"]
-            )
+        if "RawSource" not in obj or "Databases" not in obj["RawSource"]:
+            out_objects.append(obj)
+            continue
+
+        old_db = obj["RawSource"]["Databases"]
+        new_db = "DBNAME_%d" % oid
+
+        print "DEBUG id=%d propagate '%s' -> '%s'" % (oid, old_db, new_db)
+
+        # Étape 1 (déjà validée)
+        obj["RawSource"]["Databases"] = new_db
+
+        # Étape 2 — propagation globale
+        obj = replace_everywhere(obj, old_db, new_db)
 
         out_objects.append(obj)
 
-    out_data = {
-        "objects": out_objects
-    }
+    out_data = {"objects": out_objects}
 
     base, ext = os.path.splitext(src)
     out = base + "_anon.json"
@@ -325,7 +341,7 @@ def main():
         json.dumps(out_data, indent=2, ensure_ascii=False).encode("utf-8")
     )
 
-    print "Anonymisation (ETAPE 1) terminee :", out
+    print "Anonymisation (ETAPE 2) terminee :", out
     print "IDs exportes :", [o.get("id") for o in out_objects]
 
 # ------------------------------------------------
