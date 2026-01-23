@@ -283,7 +283,7 @@ def anonymize_object(obj, oid):
     return walk(obj)
 
 # ------------------------------------------------
-#V6
+#V7
 def main():
     src, ids_arg = parse_args(sys.argv)
     if not src or not os.path.isfile(src):
@@ -295,8 +295,9 @@ def main():
 
     ids = parse_ids(ids_arg, len(objects))
 
-    # import local, aucune dépendance croisée
+    # === imports explicites, aucune magie ===
     from Lib.anon_dbname import apply as anon_dbname
+    from Lib.anon_hosts  import apply as anon_hosts
 
     out_objects = []
     changed = 0
@@ -307,19 +308,26 @@ def main():
         except:
             continue
 
-        # 👉 on NE GARDE QUE les IDs demandés
+        # 👉 on ne traite QUE les IDs demandés
         if oid not in ids:
             continue
 
         before = json.dumps(obj, sort_keys=True)
 
-        # 👉 ÉTAPE 1 UNIQUEMENT : DBNAME
+        # ===============================
+        # ETAPE 1 : DBNAME
+        # ===============================
         obj = anon_dbname(obj, oid)
+
+        # ===============================
+        # ETAPE 2 : HOST / CNAME / SCAN
+        # ===============================
+        obj = anon_hosts(obj, oid)
 
         after = json.dumps(obj, sort_keys=True)
         if before != after:
             changed += 1
-            print "DEBUG id=%d: Databases anonymized -> DBNAME_%d" % (oid, oid)
+            print "DEBUG id=%d: DBNAME + HOSTS anonymised" % oid
 
         out_objects.append(obj)
 
@@ -336,10 +344,11 @@ def main():
     )
 
     print
-    print "Anonymisation (ETAPE 1 - DBNAME) terminee"
+    print "Anonymisation terminee (ETAPES 1 + 2)"
     print "  objects traites :", len(out_objects)
     print "  objets modifies :", changed
     print "  fichier :", out_file
+
 
 # ------------------------------------------------
 if __name__ == "__main__":
