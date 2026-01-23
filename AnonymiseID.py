@@ -294,6 +294,9 @@ def main():
 
     ids = parse_ids(ids_arg, len(objects))
 
+    matched = 0
+    changed = 0
+
     for obj in objects:
         try:
             oid = int(obj.get("id"))
@@ -303,9 +306,28 @@ def main():
         if oid not in ids:
             continue
 
-        # ÉTAPE 1 — modification minimale et visible
-        if "RawSource" in obj and "Databases" in obj["RawSource"]:
-            obj["RawSource"]["Databases"] = "DBNAME_%d" % oid
+        matched += 1
+
+        # DEBUG structure
+        if "RawSource" not in obj:
+            print "DEBUG id=%d: RawSource ABSENT" % oid
+            continue
+
+        if "Databases" not in obj["RawSource"]:
+            print "DEBUG id=%d: RawSource present mais Databases ABSENT. Keys=%s" % (
+                oid, ",".join(obj["RawSource"].keys())
+            )
+            continue
+
+        # ÉTAPE 1 — modification minimale
+        before = obj["RawSource"]["Databases"]
+        obj["RawSource"]["Databases"] = "DBNAME_%d" % oid
+        after = obj["RawSource"]["Databases"]
+        if before != after:
+            changed += 1
+            print "DEBUG id=%d: Databases '%s' -> '%s'" % (oid, before, after)
+        else:
+            print "DEBUG id=%d: Databases deja identique ('%s')" % (oid, after)
 
     base, ext = os.path.splitext(src)
     out = base + "_anon.json"
@@ -314,8 +336,8 @@ def main():
         json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
     )
 
-    print "Anonymisation (ETAPE 1) terminée :", out
-
+    print "DEBUG summary: objects=%d matched_ids=%d changed=%d" % (len(objects), matched, changed)
+    print "Anonymisation (ETAPE 1) terminee :", out
 
 # ------------------------------------------------
 if __name__ == "__main__":
