@@ -296,15 +296,32 @@ def main():
 
     out_objects = []
 
-    def replace_everywhere(node, old, new):
-        if isinstance(node, dict):
-            return dict((k, replace_everywhere(v, old, new))
-                        for k, v in node.items())
-        if isinstance(node, list):
-            return [replace_everywhere(x, old, new) for x in node]
-        if isinstance(node, basestring):
-            return node.replace(old, new)
-        return node
+    def anonymize_hosts(obj, oid):
+        host_map = {}
+        seq = [0]
+
+        def map_host(h):
+            if not h:
+                return h
+            if h not in host_map:
+                seq[0] += 1
+                host_map[h] = "Host_%d_%d" % (oid, seq[0])
+            return host_map[h]
+
+        def walk(node):
+            if isinstance(node, dict):
+                out = {}
+                for k, v in node.items():
+                    if k in ("host", "cname") and isinstance(v, basestring):
+                        out[k] = map_host(v)
+                    else:
+                        out[k] = walk(v)
+                return out
+            if isinstance(node, list):
+                return [walk(x) for x in node]
+            return node
+
+        return walk(obj)
 
     for obj in objects:
         try:
@@ -315,20 +332,9 @@ def main():
         if oid not in ids:
             continue
 
-        if "RawSource" not in obj or "Databases" not in obj["RawSource"]:
-            out_objects.append(obj)
-            continue
+        print "DEBUG id=%d anonymize hosts" % oid
 
-        old_db = obj["RawSource"]["Databases"]
-        new_db = "DBNAME_%d" % oid
-
-        print "DEBUG id=%d propagate '%s' -> '%s'" % (oid, old_db, new_db)
-
-        # Étape 1 (déjà validée)
-        obj["RawSource"]["Databases"] = new_db
-
-        # Étape 2 — propagation globale
-        obj = replace_everywhere(obj, old_db, new_db)
+        obj = anonymize_hosts(obj, oid)
 
         out_objects.append(obj)
 
@@ -341,7 +347,7 @@ def main():
         json.dumps(out_data, indent=2, ensure_ascii=False).encode("utf-8")
     )
 
-    print "Anonymisation (ETAPE 2) terminee :", out
+    print "Anonymisation (ETAPE 3) terminee :", out
     print "IDs exportes :", [o.get("id") for o in out_objects]
 
 # ------------------------------------------------
