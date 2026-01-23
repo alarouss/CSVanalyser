@@ -283,7 +283,7 @@ def anonymize_object(obj, oid):
     return walk(obj)
 
 # ------------------------------------------------
-#V8
+#V9
 def main():
     src, ids_arg = parse_args(sys.argv)
     if not src or not os.path.isfile(src):
@@ -295,10 +295,11 @@ def main():
 
     ids = parse_ids(ids_arg, len(objects))
 
-    # === imports explicites, aucune dépendance cachée ===
-    from Lib.anon_dbname import apply as anon_dbname
-    from Lib.anon_hosts  import apply as anon_hosts
-    from Lib.anon_ports  import apply as anon_ports
+    # === imports explicites ===
+    from Lib.anon_dbname   import apply as anon_dbname
+    from Lib.anon_hosts    import apply as anon_hosts
+    from Lib.anon_ports    import apply as anon_ports
+    from Lib.anon_services import apply as anon_services
 
     out_objects = []
     changed = 0
@@ -314,25 +315,22 @@ def main():
 
         before = json.dumps(obj, sort_keys=True)
 
-        # ===============================
         # ETAPE 1 : DBNAME
-        # ===============================
         obj = anon_dbname(obj, oid)
 
-        # ===============================
         # ETAPE 2 : HOST / CNAME / SCAN
-        # ===============================
         obj = anon_hosts(obj, oid)
 
-        # ===============================
         # ETAPE 3 : PORTS
-        # ===============================
         obj = anon_ports(obj, oid)
+
+        # ETAPE 4 : SERVICES
+        obj = anon_services(obj, oid)
 
         after = json.dumps(obj, sort_keys=True)
         if before != after:
             changed += 1
-            print "DEBUG id=%d: DBNAME + HOSTS + PORTS anonymised" % oid
+            print "DEBUG id=%d: DBNAME + HOSTS + PORTS + SERVICES anonymised" % oid
 
         out_objects.append(obj)
 
@@ -348,7 +346,7 @@ def main():
     )
 
     print
-    print "Anonymisation terminee (ETAPES 1 + 2 + 3)"
+    print "Anonymisation terminee (ETAPES 1 a 4)"
     print "  objects traites :", len(out_objects)
     print "  objets modifies :", changed
     print "  fichier :", out_file
