@@ -180,7 +180,7 @@ def compute_network_block(host, step_prefix, pos, total):
 # ------------------------------------------------
 def build_object_v3(row, obj_id, store_index, force_update, oem_conn, pos, total, raw_debug=None):
 
-    raw = build_raw_source(row)
+    raw = build_raw_source(row["__ROW_NORM__"])
 
     cached = store_index.get(obj_id)
     dirty = False
@@ -285,6 +285,7 @@ def build_object_v3(row, obj_id, store_index, force_update, oem_conn, pos, total
                           oem_err_detail=oem_err_detail)
 
     # IMPORTANT: rendre OEM visible pour ReportV3 (racine + Network)
+    raw_debug = row.get("__RAW_CSV__", {})
     obj = {
         "id": obj_id,
         "RawSource": raw,
