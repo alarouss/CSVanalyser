@@ -233,33 +233,43 @@ if __name__ == "__main__":
 
     store = json.loads(open(store_file,"rb").read().decode("utf-8"))
     objs = store.get("objects", [])
-
+#-----------------------------------------
+    
+#------------------------------------------
     if "-summary" in args:
-
+    
+        # 1) summary ?
+        if "?" in args:
+            print "\nFiltres disponibles :"
+            for k in sorted(FILTER_FIELDS.keys()):
+                print " ", k
+            sys.exit(0)
+    
+        # 2) filtres progressifs
         for a in args:
-            if a == "?":
-                print "\nFiltres disponibles :"
-                for k in sorted(FILTER_FIELDS.keys()):
-                    print " ", k
+            if "=" not in a:
+                continue
+    
+            k, v = a.split("=", 1)
+            if k not in FILTER_FIELDS:
+                continue
+    
+            if v == "?":
+                # valeurs possibles APRES filtres precedents
+                vals = sorted(set(FILTER_FIELDS[k](o) for o in objs))
+                print "\nValeurs disponibles pour", k, ":"
+                for x in vals:
+                    print " ", x
                 sys.exit(0)
-
-            if "=" in a:
-                k, v = a.split("=",1)
-                if k in FILTER_FIELDS:
-                    if v == "?":
-                        vals = sorted(set(FILTER_FIELDS[k](o) for o in objs))
-                        print "\nValeurs disponibles pour", k, ":"
-                        for x in vals:
-                            print " ", x
-                        sys.exit(0)
-                    else:
-                        vv = ustr(v)
-                        objs = [o for o in objs if ustr(FILTER_FIELDS[k](o)) == vv]
-                        break
-
+            else:
+                vv = ustr(v)
+                objs = [o for o in objs if ustr(FILTER_FIELDS[k](o)) == vv]
+    
+        # 3) affichage final
         print_summary({"objects": objs})
         sys.exit(0)
 
+------------------------------------------
     option = None
     for a in args:
         if a.startswith("id="):
