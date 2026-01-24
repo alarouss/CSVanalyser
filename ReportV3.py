@@ -3,6 +3,7 @@
 # ReportV3.py (base ReportV2 + prise en compte OEM + debug = Error + RawSource)
 
 import json, sys, textwrap, re, os
+from Lib.io_common import load_main_conf, ustr, strip_ansi
 
 KEY_WIDTH   = 24
 VALUE_WIDTH = 60
