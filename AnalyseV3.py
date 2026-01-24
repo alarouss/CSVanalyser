@@ -6,8 +6,9 @@ import sys
 import time
 import os
 
-from Lib.common import ustr
-from Lib.config import load_main_conf
+#from Lib.common import ustr
+#from Lib.config import load_main_conf
+from Lib.io_common import load_main_conf, ustr
 from Lib.store import load_store, save_store, build_index
 from Lib.jdbc_flow_v2 import interpret, compare, resolve_cname, resolve_scan
 from Lib.oem_flow import oem_get_host_and_port
