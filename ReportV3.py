@@ -1,103 +1,106 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# ReportV3.py — SUMMARY enrichi (visuel) sans régression
+# ReportV3.py — Summary & Detail JDBC (avec OEM, erreurs détaillées, debug)
 
-import json, sys, textwrap, re, os
+import json, sys, os, textwrap
 
 from Lib.common import (
-    ustr, pad, trim_lot,
-    strip_ansi,
-    print_section, print_table,
-    RED, GREEN, YELLOW, RESET
+    ustr, strip_ansi, pad, trim_lot,
+    RED, GREEN, YELLOW, RESET,
+    print_section, print_table
 )
+
+CONF_FILE = os.path.join("Data", "config.conf")
 
 KEY_WIDTH   = 24
 VALUE_WIDTH = 60
 
-CONF_FILE = os.path.join("Data","config.conf")
-
-# ============================================================
-# CONFIG
-# ============================================================
-
+# ------------------------------------------------
 def load_main_conf():
     if not os.path.isfile(CONF_FILE):
         return None, "CONF_MISSING", "Missing %s" % CONF_FILE
 
     d = {}
     try:
-        for line in open(CONF_FILE,"rb").read().splitlines():
+        for line in open(CONF_FILE, "rb").read().splitlines():
             try:
-                s = line.decode("utf-8","ignore")
+                s = line.decode("utf-8", "ignore")
             except:
                 s = line
             s = s.strip()
-            if not s or s.startswith("#") or s.startswith(";"): continue
-            if "=" not in s: continue
-            k,v = s.split("=",1)
+            if not s or s.startswith("#") or s.startswith(";"):
+                continue
+            if "=" not in s:
+                continue
+            k, v = s.split("=", 1)
             d[k.strip()] = v.strip()
 
         if not d.get("SOURCE_JSON"):
-            return None,"CONF_INVALID","SOURCE_JSON missing"
+            return None, "CONF_INVALID", "SOURCE_JSON missing in %s" % CONF_FILE
 
-        return d,None,None
+        return d, None, None
     except Exception as e:
-        return None,"CONF_ERROR",str(e)
+        return None, "CONF_ERROR", str(e)
 
-# ============================================================
-# VISUAL STATUS (NOUVEAU — AFFICHAGE SEULEMENT)
-# ============================================================
+# ================================================================
+# VISUAL MAPPING (UNIQUEMENT AFFICHAGE)
+# ================================================================
 
-def visual_status(val):
-    if val in ("VALIDE", "OK", True):
-        return GREEN + u"✔ OK" + RESET
-    if val in ("ERROR", False):
-        return RED + u"✘ ERROR" + RESET
-    if val == "DIFFERENT":
-        return YELLOW + u"▲ DIFF" + RESET
-    if val in ("NOT_APPLICABLE", None):
+def visual_global_status(val):
+    if not val:
         return u"◻ N/A"
-    return ustr(val)
+    v = ustr(val).lower()
 
-# ============================================================
-# LOGIQUE DE COMPARAISON (NOUVEAU)
-# ============================================================
+    if v in (u"terminé", u"termine"):
+        return GREEN + u"✔ " + ustr(val) + RESET
+    if v in (u"en cours",):
+        return YELLOW + u"▲ " + ustr(val) + RESET
+    if v in (u"ko", u"erreur"):
+        return RED + u"✘ " + ustr(val) + RESET
 
-def compare_block(ref, block):
-    """
-    Compare host / cname / scan par rapport à une référence
-    Retourne: OK | DIFFERENT | ERROR | NOT_APPLICABLE
-    """
-    if not block:
-        return "NOT_APPLICABLE"
-    if not ref or not block:
-        return "NOT_APPLICABLE"
+    return YELLOW + u"▲ " + ustr(val) + RESET
 
-    if not ref.get("scan") or not block.get("scan"):
-        return "ERROR"
+def visual_status_code(code):
+    if not code:
+        return u"◻ N/A"
 
-    if ref.get("scan") == block.get("scan"):
-        return "OK"
+    c = ustr(code)
 
-    return "DIFFERENT"
+    if c in ("OK", "VALIDE"):
+        return GREEN + u"✔ OK" + RESET
 
-# ============================================================
-# SUMMARY FILTERS (CONTRAT RESTAURÉ)
-# ============================================================
+    if "ERROR" in c:
+        return RED + u"✘ " + c + RESET
+
+    if "DIFFERENT" in c or "NO_RESULT" in c:
+        return YELLOW + u"▲ " + c + RESET
+
+    if c == "NOT_APPLICABLE":
+        return u"◻ N/A"
+
+    return YELLOW + u"▲ " + c + RESET
+
+def visual_bool(val, yes_label="YES", no_label="NO"):
+    return (GREEN + u"✔ " + yes_label + RESET) if val else (RED + u"✘ " + no_label + RESET)
+
+# ================================================================
+# SUMMARY FILTER SUPPORT (CONTRAT RESTAURÉ)
+# ================================================================
 
 FILTER_FIELDS = {
     "Database":    lambda o: ustr(o.get("RawSource",{}).get("Databases","")),
     "Application": lambda o: ustr(o.get("RawSource",{}).get("Application","")),
     "Lot":         lambda o: trim_lot(o.get("RawSource",{}).get("Lot","")),
-    "DR":          lambda o: ustr(o.get("RawSource",{}).get("DR O/N","")),
-    "Statut":      lambda o: strip_ansi(ustr(o.get("RawSource",{}).get("Statut Global",""))),
+    "DR":          lambda o: ustr(o.get("RawSource",{}).get("DR O/N") or o.get("RawSource",{}).get("DR","")),
+    "Statut":      lambda o: strip_ansi(visual_global_status(o.get("RawSource",{}).get("Statut Global"))),
     "Valid":       lambda o: "YES" if o.get("Status",{}).get("ValidSyntax") else "NO",
+    "Scan":        lambda o: ustr(o.get("Status",{}).get("ScanCompare","")),
     "Dirty":       lambda o: "YES" if o.get("Status",{}).get("Dirty") else "NO",
 }
 
-# ============================================================
+# ================================================================
 # SUMMARY
-# ============================================================
+# ================================================================
 
 def print_summary(store):
 
@@ -110,18 +113,17 @@ def print_summary(store):
         ("Application",18),
         ("Lot",8),
         ("DR",3),
-        ("Statut Global",20),
-        ("Valid",10),
-        ("OEM Status",14),
-        ("Current STR",14),
-        ("New STR",14),
-        ("New DR",14),
-        ("Dirty",8)
+        ("Statut Global",24),
+        ("Valid Syntax",14),
+        ("OEM Status",18),
+        ("Current STR",18),
+        ("New STR",18),
+        ("New DR",18),
+        ("Dirty",6),
     ]
 
-    # Header
-    line=u" "
-    sep=u" "
+    line = u" "
+    sep  = u" "
     for h,w in headers:
         line += pad(h,w) + u" | "
         sep  += u"-"*w + u"-+-"
@@ -131,33 +133,41 @@ def print_summary(store):
     for o in objs:
         rs = o.get("RawSource",{})
         st = o.get("Status",{})
-        net = o.get("Network",{})
-
-        ref = net.get("Current",{})
 
         row = [
             o.get("id",""),
             rs.get("Databases",""),
             rs.get("Application",""),
             trim_lot(rs.get("Lot","")),
-            rs.get("DR O/N",""),
-            rs.get("Statut Global",""),
-            visual_status(st.get("ValidSyntax")),
-            visual_status(compare_block(ref, net.get("OEM"))),
-            visual_status("OK" if not st.get("ErrorType") else "ERROR"),
-            visual_status(compare_block(ref, net.get("New"))),
-            visual_status(compare_block(ref, net.get("NewDR"))),
-            visual_status(not st.get("Dirty"))
+            rs.get("DR O/N") or rs.get("DR",""),
+            visual_global_status(rs.get("Statut Global")),
+            visual_bool(st.get("ValidSyntax")),
+            visual_status_code(st.get("OEMErrorType") or "OK"),
+            visual_status_code(st.get("ErrorType") or "OK"),
+            visual_status_code(st.get("ScanCompare")),
+            visual_status_code(st.get("ScanCompareDR")),
+            visual_bool(st.get("Dirty")),
         ]
 
-        line=u" "
+        line = u" "
         for (val,(h,w)) in zip(row,headers):
             line += pad(val,w) + u" | "
         print line[:-3].encode("utf-8")
 
-# ============================================================
-# DETAIL VIEW (INCHANGÉ)
-# ============================================================
+# ================================================================
+# DETAIL VIEW
+# ================================================================
+
+def show_network_block(title, block, include_port=False):
+    print_section(title)
+    rows = [
+        ("Host",  block.get("host")),
+        ("CNAME", block.get("cname")),
+        ("SCAN",  block.get("scan")),
+    ]
+    if include_port:
+        rows.insert(1, ("Port", block.get("port")))
+    print_table(rows)
 
 def show_object(o, debug=False):
 
@@ -165,128 +175,121 @@ def show_object(o, debug=False):
     st  = o.get("Status",{})
     net = o.get("Network",{})
 
-    print (u"\nID = %s — Database: %s" % (
-        o.get("id",""),
-        rs.get("Databases","")
-    )).encode("utf-8")
+    print (u"\nID = %s — Database: %s" % (o.get("id",""), rs.get("Databases",""))).encode("utf-8")
 
     print_section("METADATA")
     print_table([
         ("Application",rs.get("Application")),
         ("Lot",rs.get("Lot")),
         ("Databases",rs.get("Databases")),
-        ("DR",rs.get("DR O/N")),
-        ("Statut Global",rs.get("Statut Global")),
+        ("DR",rs.get("DR O/N") or rs.get("DR")),
+        ("Statut Global", visual_global_status(rs.get("Statut Global"))),
         ("Acces",rs.get("Acces"))
     ])
 
-    for title,key in [
-        ("CURRENT JDBC","Current"),
-        ("NEW JDBC","New"),
-        ("NEW JDBC DR","NewDR"),
-        ("OEM CONN","OEM")
-    ]:
-        block = net.get(key,{})
-        print_section(title)
-        rows=[
-            ("Host",block.get("host")),
-            ("CNAME",block.get("cname")),
-            ("SCAN",block.get("scan")),
-        ]
-        if key=="OEM":
-            rows.insert(1,("Port",block.get("port")))
-        print_table(rows)
+    show_network_block("CURRENT JDBC", net.get("Current",{}))
+    show_network_block("NEW JDBC", net.get("New",{}))
+    show_network_block("NEW JDBC DR", net.get("NewDR",{}))
+    show_network_block("OEM CONN", net.get("OEM",{}), include_port=True)
 
     print_section("STATUS")
-    rows=[
-        ("Valid Syntax",st.get("ValidSyntax")),
-        ("Scan Compare",st.get("ScanCompare")),
-        ("Scan Compare DR",st.get("ScanCompareDR")),
-        ("Dirty",st.get("Dirty")),
-        ("Mode",st.get("Mode")),
-        ("Last Update",st.get("LastUpdateTime")),
+    rows_status = [
+        ("Valid Syntax", visual_bool(st.get("ValidSyntax"))),
+        ("Scan Compare", visual_status_code(st.get("ScanCompare"))),
+        ("Scan Compare DR", visual_status_code(st.get("ScanCompareDR"))),
+        ("Dirty", visual_bool(st.get("Dirty"))),
+        ("Dirty Reason", st.get("DirtyReason")),
+        ("Mode", st.get("Mode")),
+        ("Last Update", st.get("LastUpdateTime")),
     ]
-    if st.get("ErrorType"):
-        rows += [
-            ("Error Type",st.get("ErrorType")),
-            ("Error Detail",st.get("ErrorDetail")),
+
+    if st.get("ErrorType") or st.get("ErrorDetail"):
+        rows_status += [
+            ("Error Type", st.get("ErrorType")),
+            ("Error Detail", st.get("ErrorDetail")),
         ]
-    if st.get("OEMErrorType"):
-        rows += [
-            ("OEM Error Type",st.get("OEMErrorType")),
-            ("OEM Error Detail",st.get("OEMErrorDetail")),
+
+    if st.get("OEMErrorType") or st.get("OEMErrorDetail"):
+        rows_status += [
+            ("OEM Error Type", st.get("OEMErrorType")),
+            ("OEM Error Detail", st.get("OEMErrorDetail")),
         ]
-    print_table(rows)
+
+    print_table(rows_status)
 
     if debug:
         print_section("RAWSOURCE (DEBUG)")
-        print_table(sorted(rs.items()))
+        raw_rows = [(k, rs.get(k)) for k in sorted(rs.keys())]
+        print_table(raw_rows)
 
-# ============================================================
+# ================================================================
 # MAIN
-# ============================================================
+# ================================================================
 
 if __name__=="__main__":
 
     if len(sys.argv)<2 or sys.argv[1] in ("-help","-h","--help"):
-        print "Usage: ReportV3.py -summary | id=N [-debug]"
+        print_help()
         sys.exit(0)
 
-    args=sys.argv[1:]
+    args = sys.argv[1:]
     DEBUG = ("-debug" in args)
 
-    conf,err,msg = load_main_conf()
-    if err:
-        print "Configuration error:",err,msg
+    main_conf, mce, mcd = load_main_conf()
+    if mce:
+        print "Configuration error:", mce
+        print mcd
         sys.exit(1)
 
-    store_file = conf.get("SOURCE_JSON")
-    store=json.loads(open(store_file,"rb").read().decode("utf-8"))
-    objs=store.get("objects",[])
+    store_file = main_conf.get("SOURCE_JSON")
+    store = json.loads(open(store_file,"rb").read().decode("utf-8"))
+    objs  = store.get("objects",[])
 
     if "-summary" in args:
-        # filtres
+
         for a in args:
-            if a=="?":
-                print "\nFiltres disponibles:"
-                for k in sorted(FILTER_FIELDS):
-                    print " ",k
+            if a == "?":
+                print "\nFiltres disponibles :"
+                for k in sorted(FILTER_FIELDS.keys()):
+                    print " ", k
                 sys.exit(0)
 
             if "=" in a:
-                k,v=a.split("=",1)
+                k,v = a.split("=",1)
                 if k in FILTER_FIELDS:
-                    if v=="?":
-                        vals=sorted(set(FILTER_FIELDS[k](o) for o in objs))
-                        print "\nValeurs pour",k,":"
+                    if v == "?":
+                        vals = sorted(set(FILTER_FIELDS[k](o) for o in objs))
+                        print "\nValeurs disponibles pour",k,":"
                         for x in vals:
-                            print " ",x
+                            print " ", x
                         sys.exit(0)
                     else:
-                        objs=[o for o in objs if FILTER_FIELDS[k](o)==v]
+                        vv = ustr(v)
+                        objs = [o for o in objs if ustr(FILTER_FIELDS[k](o)) == vv]
+                        break
 
         print_summary({"objects":objs})
         sys.exit(0)
 
-    # id=N
-    target=None
+    option = None
     for a in args:
         if a.startswith("id="):
-            target=int(a.split("=")[1])
+            option = a
 
-    if not target:
+    if not option:
         print_summary(store)
         sys.exit(0)
 
-    found=None
+    target = int(option.split("=")[1])
+    found  = None
     for o in objs:
-        if o.get("id")==target:
-            found=o
+        if o.get("id") == target:
+            found = o
             break
 
     if not found:
-        print "ID non trouvé:",target
+        print "ID non trouvé:", target
         sys.exit(0)
 
-    show_object(found,DEBUG)
+    show_object(found, DEBUG)
     print "\nReportV3 terminé."
