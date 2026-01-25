@@ -179,48 +179,41 @@ def compute_network_block(host, step, pos, total):
 # ------------------------------------------------
 def fill_net_from_addresses(parsed, net_side):
     """
-    Remplit net_side {"Primaire":{}, "DR":{}} à partir de parsed.addresses
-    parsed.addresses peut être :
-      - None
-      - string (host)
-      - liste de strings
-      - liste de dicts {host, role}
+    Remplit net_side {"Primaire":{}, "DR":{}} à partir de parsed
+    Règle :
+      - addresses > host > rien
     """
 
-    if not parsed or not hasattr(parsed, "addresses"):
+    if not parsed:
         return
 
-    addrs = parsed.addresses
-    if not addrs:
+    # 1️⃣ Cas structuré : addresses
+    addrs = getattr(parsed, "addresses", None)
+    if addrs:
+        if isinstance(addrs, basestring):
+            addrs = [addrs]
+
+        for a in addrs:
+            if isinstance(a, dict):
+                host = a.get("host")
+                role = a.get("role") or "Primaire"
+            else:
+                host = a
+                role = "Primaire"
+
+            if not host:
+                continue
+
+            if role not in net_side:
+                role = "Primaire"
+
+            net_side[role]["host"] = host
         return
 
-    # Normalisation en liste
-    if isinstance(addrs, basestring):
-        addrs = [addrs]
-
-    for a in addrs:
-
-        # ---- Cas structuré dict ----
-        if isinstance(a, dict):
-            host = a.get("host")
-            role = a.get("role") or "Primaire"
-
-            # 🔒 Garde CRITIQUE : un rôle seul n’est pas un host
-            if not host or host.upper() in ("DR", "PRIMARY", "PRIMAIRE"):
-                continue
-
-        # ---- Cas string ----
-        else:
-            # 🔒 Garde CRITIQUE : string = rôle => ignorer
-            if a.upper() in ("DR", "PRIMARY", "PRIMAIRE"):
-                continue
-            host = a
-            role = "Primaire"
-
-        if role not in net_side:
-            role = "Primaire"
-
-        net_side[role]["host"] = host
+    # 2️⃣ Fallback : host simple
+    host = getattr(parsed, "host", None)
+    if host:
+        net_side["Primaire"]["host"] = host
 
 # ------------------------------------------------
 def build_raw_source(row):
