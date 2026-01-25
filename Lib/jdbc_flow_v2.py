@@ -78,83 +78,115 @@ class ParsedJdbc(object):
         self.addresses = []   # NOUVEAU (liste complète)
 
 # ------------------------------------------------
-def interpret(jdbc):
+def interpret(raw):
     """
-    Analyse une chaine JDBC Oracle SQLNet.
-    Supporte 1 ou plusieurs ADDRESS_LIST.
-    Ne casse aucun contrat existant.
+    Interprétation JDBC Oracle.
+
+    Compatibilité totale V2 :
+      - obj.host
+      - obj.port
+      - obj.service_name
+      - obj.valide
+
+    Extension V3 :
+      - obj.addresses = [
+            {"role": "Primaire", "host": "...", "port": "..."},
+            {"role": "DR",       "host": "...", "port": "..."}
+        ]
     """
 
-    p = ParsedJdbc()
+    class Parsed(object):
+        def __init__(self):
+            self.host = None
+            self.port = None
+            self.service_name = None
+            self.valide = False
+            self.addresses = []
 
-    if not jdbc:
-        return p, "JDBC_EMPTY", "Empty JDBC string"
+    obj = Parsed()
 
-    s = jdbc.strip()
-    s_low = s.lower()
+    if not raw:
+        return obj, "EMPTY", "Empty JDBC string"
 
-    if "jdbc:oracle:thin:@" not in s_low:
-        return p, "JDBC_INVALID", "Not an Oracle JDBC thin URL"
+    s = raw.strip()
 
-    try:
-        # Normalisation légère
-        txt = s.replace("\n", "").replace("\r", "")
+    # -------------------------------
+    # CAS 1 : JDBC SIMPLE
+    # jdbc:oracle:thin:@host:port/service
+    # -------------------------------
+    m = re.search(
+        r'jdbc:oracle:thin:@([^:/()]+):(\d+)[/:]([^"\s,)+]+)',
+        s,
+        re.I
+    )
+    if m:
+        h, p, svc = m.group(1), m.group(2), m.group(3)
 
-        # --- Extraction SERVICE_NAME (unique, commun à toutes les adresses)
-        m_srv = re.search(r"service_name\s*=\s*([^)]+)", txt, re.I)
-        service = m_srv.group(1).strip() if m_srv else None
+        obj.host = h
+        obj.port = p
+        obj.service_name = svc
+        obj.valide = True
 
-        # --- Extraction de TOUS les blocs ADDRESS
+        obj.addresses.append({
+            "role": "Primaire",
+            "host": h,
+            "port": p
+        })
+
+        return obj, None, None
+
+    # -------------------------------
+    # CAS 2 : SQLNet (DESCRIPTION)
+    # support multi ADDRESS_LIST
+    # -------------------------------
+    if "(description" in s.lower():
+
+        # service_name
+        msvc = re.search(r'service_name\s*=\s*([^)]+)', s, re.I)
+        if msvc:
+            obj.service_name = msvc.group(1).strip()
+
+        # récupération de tous les ADDRESS
         addr_blocks = re.findall(
-            r"\(\s*address\s*=\s*\((.*?)\)\s*\)",
-            txt,
+            r'\(\s*address\s*=\s*\(([^)]*)\)\s*\)',
+            s,
             re.I
         )
 
-        addresses = []
+        seq = 0
+        for block in addr_blocks:
+            mh = re.search(r'host\s*=\s*([^)]+)', block, re.I)
+            mp = re.search(r'port\s*=\s*([^)]+)', block, re.I)
 
-        for blk in addr_blocks:
-            mh = re.search(r"host\s*=\s*([^)]+)", blk, re.I)
-            mp = re.search(r"port\s*=\s*([^)]+)", blk, re.I)
+            if not mh:
+                continue
 
-            host = mh.group(1).strip() if mh else None
-            port = mp.group(1).strip() if mp else None
+            h = mh.group(1).strip()
+            p = mp.group(1).strip() if mp else None
 
-            if host:
-                addresses.append({
-                    "host": host,
-                    "port": port,
-                    "service": service
-                })
+            role = "Primaire" if seq == 0 else "DR"
 
-        # --- Cas simple : jdbc:oracle:thin:@host:port/service
-        if not addresses:
-            m = re.search(
-                r"@\s*([^:/\)]+)\s*:\s*([0-9]+)\s*/\s*([^\s\"\,\)]+)",
-                txt
-            )
-            if m:
-                addresses.append({
-                    "host": m.group(1).strip(),
-                    "port": m.group(2).strip(),
-                    "service": m.group(3).strip()
-                })
+            obj.addresses.append({
+                "role": role,
+                "host": h,
+                "port": p
+            })
 
-        if not addresses:
-            return p, "JDBC_PARSE_ERROR", "No HOST found in JDBC string"
+            # compat V2
+            if seq == 0:
+                obj.host = h
+                obj.port = p
 
-        # --- Alimentation objet de sortie
-        p.addresses = addresses
-        p.host = addresses[0]["host"]
-        p.port = addresses[0]["port"]
-        p.service = addresses[0]["service"]
-        p.valide = True
+            seq += 1
 
-        return p, None, None
+        if obj.addresses:
+            obj.valide = True
+            return obj, None, None
 
-    except Exception as e:
-        return p, "JDBC_EXCEPTION", str(e)
-
+    # -------------------------------
+    # ÉCHEC
+    # -------------------------------
+    return obj, "SYNTAX_ERROR", "Unrecognized JDBC syntax"
 
 # ------------------------------------------------
 def resolve_cname(host):
