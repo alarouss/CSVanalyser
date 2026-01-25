@@ -310,7 +310,7 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
 
     err_type = None
     err_detail = None
-
+    print("DEBUG VALID =", valid, "cur_o =", cur_o, "new_o =", new_o)
     if not valid:
         status = build_status(
             False, "ERROR", None,
