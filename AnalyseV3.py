@@ -176,6 +176,7 @@ def compute_network_block(host, step, pos, total):
 def fill_net_from_addresses(parsed, net_side):
     """
     Remplit net_side {"Primaire":{}, "DR":{}} à partir de parsed (interpret)
+
     parsed.addresses peut être :
       - None
       - string
@@ -193,18 +194,34 @@ def fill_net_from_addresses(parsed, net_side):
         addrs = [addrs]
 
     for a in addrs:
+
+        # ------------------------------
         # Cas 1 : dict structuré
+        # ------------------------------
         if isinstance(a, dict):
             role = a.get("role", "Primaire")
             host = a.get("host")
-        # Cas 2 : simple string => Primaire
+
+        # ------------------------------
+        # Cas 2 : string simple
+        # ------------------------------
         else:
             role = "Primaire"
             host = a
 
+        # Sécurité : rôle inconnu
         if role not in net_side:
             continue
 
+        # Sécurité CRITIQUE :
+        # on ignore les pseudo-hosts ("DR", "PRIMAIRE", None, "")
+        if not host:
+            continue
+
+        if isinstance(host, basestring) and host.upper() in ("DR", "PRIMAIRE"):
+            continue
+
+        # Affectation finale
         net_side[role]["host"] = host
 
 # ------------------------------------------------
