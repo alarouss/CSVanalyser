@@ -157,33 +157,33 @@ def compare(scan1, scan2):
 def interpret(raw):
     """
     Point d'entrée utilisé par AnalyseV3.
-    Doit rester rétro-compatible :
-      - o.host (primaire)
-      - o.valide
-      - o.addresses["Primaire"]["host"], o.addresses["DR"]["host"]
+    Doit TOUJOURS retourner (obj, err_code, err_detail)
     """
     o = JdbcParsed()
+
     s = _clean_jdbc(raw)
     o.raw = s
 
     if not s:
-        # chaîne vide => pas une erreur de syntaxe, juste N/A
         o.valide = False
         o.mode = "EMPTY"
         return o, "EMPTY", "Empty JDBC string"
 
-    # 1) essayer simple
+    # 1) simple
     os = _parse_simple(s)
-    if os.valide:
-        o = os
-    else:
-        # 2) essayer sqlnet
-        on = _parse_sqlnet(s)
-        if on.valide:
-            o = on
-        else:
-            # 3) sinon : syntaxe inconnue
-            return o, "SYNTAX_ERROR", "Invalid JDBC syntax"
+    if os and os.valide:
+        return os, None, None
+
+    # 2) sqlnet
+    on = _parse_sqlnet(s)
+    if on and on.valide:
+        return on, None, None
+
+    # 3) syntax error
+    o.valide = False
+    o.mode = "INVALID"
+    return o, "SYNTAX_ERROR", "Invalid JDBC syntax"
+
 
     # ===============================
     # 🔒 NORMALISATION CONTRAT (A2)
