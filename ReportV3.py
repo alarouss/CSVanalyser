@@ -227,6 +227,22 @@ def show_object(o, debug=False):
             ("SCAN", block.get("scan")),
             ("Status", compute_block_status(block, app)[0]),
         ]
+        
+        block = net.get(key, {})
+
+        # 🔽 compat nouveau modèle
+        if "Primaire" in block:
+            block_p = block.get("Primaire", {})
+        else:
+            block_p = block
+        
+        rows = [
+            ("Host", block_p.get("host")),
+            ("CNAME", block_p.get("cname")),
+            ("SCAN", block_p.get("scan")),
+            ("Status", compute_block_status(block, app)[0]),
+        ]
+        
         if key == "OEM":
             rows.insert(1, ("Port", block.get("port")))
         print_table(rows)
