@@ -62,18 +62,99 @@ def parse_jdbc(raw):
     return parse_sqlnet_jdbc(raw)
 
 # ------------------------------------------------
-def interpret(raw):
+# ------------------------------------------------
+# EXTENSION MULTI ADDRESS_LIST – Oracle SQLNet
+# Compatible Python 2.6 – sans regression
+# ------------------------------------------------
+
+
+
+class ParsedJdbc(object):
+    def __init__(self):
+        self.valide = False
+        self.host = None
+        self.port = None
+        self.service = None
+        self.addresses = []   # NOUVEAU (liste complète)
+
+# ------------------------------------------------
+def interpret(jdbc):
     """
-    API compatible AnalyseV3:
-    retourne (JdbcChaine, err_type, err_detail)
+    Analyse une chaine JDBC Oracle SQLNet.
+    Supporte 1 ou plusieurs ADDRESS_LIST.
+    Ne casse aucun contrat existant.
     """
+
+    p = ParsedJdbc()
+
+    if not jdbc:
+        return p, "JDBC_EMPTY", "Empty JDBC string"
+
+    s = jdbc.strip()
+    s_low = s.lower()
+
+    if "jdbc:oracle:thin:@" not in s_low:
+        return p, "JDBC_INVALID", "Not an Oracle JDBC thin URL"
+
     try:
-        raw = clean_jdbc(raw)
-        o = parse_jdbc(raw)
-        return o, None, None
+        # Normalisation légère
+        txt = s.replace("\n", "").replace("\r", "")
+
+        # --- Extraction SERVICE_NAME (unique, commun à toutes les adresses)
+        m_srv = re.search(r"service_name\s*=\s*([^)]+)", txt, re.I)
+        service = m_srv.group(1).strip() if m_srv else None
+
+        # --- Extraction de TOUS les blocs ADDRESS
+        addr_blocks = re.findall(
+            r"\(\s*address\s*=\s*\((.*?)\)\s*\)",
+            txt,
+            re.I
+        )
+
+        addresses = []
+
+        for blk in addr_blocks:
+            mh = re.search(r"host\s*=\s*([^)]+)", blk, re.I)
+            mp = re.search(r"port\s*=\s*([^)]+)", blk, re.I)
+
+            host = mh.group(1).strip() if mh else None
+            port = mp.group(1).strip() if mp else None
+
+            if host:
+                addresses.append({
+                    "host": host,
+                    "port": port,
+                    "service": service
+                })
+
+        # --- Cas simple : jdbc:oracle:thin:@host:port/service
+        if not addresses:
+            m = re.search(
+                r"@\s*([^:/\)]+)\s*:\s*([0-9]+)\s*/\s*([^\s\"\,\)]+)",
+                txt
+            )
+            if m:
+                addresses.append({
+                    "host": m.group(1).strip(),
+                    "port": m.group(2).strip(),
+                    "service": m.group(3).strip()
+                })
+
+        if not addresses:
+            return p, "JDBC_PARSE_ERROR", "No HOST found in JDBC string"
+
+        # --- Alimentation objet de sortie
+        p.addresses = addresses
+        p.host = addresses[0]["host"]
+        p.port = addresses[0]["port"]
+        p.service = addresses[0]["service"]
+        p.valide = True
+
+        return p, None, None
+
     except Exception as e:
-        o = JdbcChaine()
-        return o, "PARSE_EXCEPTION", str(e)
+        return p, "JDBC_EXCEPTION", str(e)
+
 
 # ------------------------------------------------
 def resolve_cname(host):
