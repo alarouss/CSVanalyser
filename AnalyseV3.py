@@ -179,15 +179,28 @@ def compute_network_block(host, step, pos, total):
 # ------------------------------------------------
 def fill_net_from_addresses(parsed, net_side):
     """
-    Remplit net_side {"Primaire":{}, "DR":{}} à partir de parsed
-    Règle :
-      - addresses > host > rien
+    Remplit net_side {"Primaire":{}, "DR":{}}
+    à partir de parsed (interpret).
+
+    Règles :
+      - ignore les tokens structurels ("DR", "PRIMARY", etc.)
+      - addresses > host simple
     """
 
     if not parsed:
         return
 
-    # 1️⃣ Cas structuré : addresses
+    def is_valid_host(h):
+        if not h:
+            return False
+        h = h.strip()
+        # Rejeter mots-clés structurels
+        if h.upper() in ("DR", "PRIMARY", "PRIMAIRE"):
+            return False
+        # Heuristique minimale host
+        return ("." in h) or any(c.isdigit() for c in h)
+
+    # 1️⃣ Cas addresses structurées
     addrs = getattr(parsed, "addresses", None)
     if addrs:
         if isinstance(addrs, basestring):
@@ -201,18 +214,19 @@ def fill_net_from_addresses(parsed, net_side):
                 host = a
                 role = "Primaire"
 
-            if not host:
+            if not is_valid_host(host):
                 continue
 
             if role not in net_side:
                 role = "Primaire"
 
             net_side[role]["host"] = host
+
         return
 
     # 2️⃣ Fallback : host simple
     host = getattr(parsed, "host", None)
-    if host:
+    if is_valid_host(host):
         net_side["Primaire"]["host"] = host
 
 # ------------------------------------------------
