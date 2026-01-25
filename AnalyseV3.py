@@ -182,7 +182,7 @@ def fill_net_from_addresses(parsed, net_side):
     Remplit net_side {"Primaire":{}, "DR":{}} à partir de parsed.addresses
     parsed.addresses peut être :
       - None
-      - string
+      - string (host)
       - liste de strings
       - liste de dicts {host, role}
     """
@@ -199,17 +199,23 @@ def fill_net_from_addresses(parsed, net_side):
         addrs = [addrs]
 
     for a in addrs:
-        # Cas structuré
+
+        # ---- Cas structuré dict ----
         if isinstance(a, dict):
             host = a.get("host")
             role = a.get("role") or "Primaire"
-        # Cas simple string
+
+            # 🔒 Garde CRITIQUE : un rôle seul n’est pas un host
+            if not host or host.upper() in ("DR", "PRIMARY", "PRIMAIRE"):
+                continue
+
+        # ---- Cas string ----
         else:
+            # 🔒 Garde CRITIQUE : string = rôle => ignorer
+            if a.upper() in ("DR", "PRIMARY", "PRIMAIRE"):
+                continue
             host = a
             role = "Primaire"
-
-        if not host:
-            continue
 
         if role not in net_side:
             role = "Primaire"
