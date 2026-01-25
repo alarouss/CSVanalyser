@@ -190,20 +190,14 @@ def interpret(raw):
 
 def resolve_cname(host):
     """
-    Wrapper de compatibilité.
-    Retour attendu :
-      (cname, error_type, error_detail)
+    Stub CNAME.
+    Retour : (cname, error_type, error_detail)
     """
     if not host:
         return None, "HOST_EMPTY", "Host is empty"
 
-    try:
-        cname = _resolve_cname_internal(host)  # ou ta logique interne
-        if not cname:
-            return None, "CNAME_NOT_FOUND", "No CNAME found for %s" % host
-        return cname, None, None
-    except Exception as e:
-        return None, "CNAME_EXCEPTION", str(e)
+    # stub : on considère que le host est déjà un cname
+    return host, None, None
 
 # ------------------------------------------------
 def resolve_scan(host):
