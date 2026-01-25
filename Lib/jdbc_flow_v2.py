@@ -184,3 +184,41 @@ def interpret(raw):
 
     # 3) sinon : syntaxe inconnue
     return o, "SYNTAX_ERROR", "Invalid JDBC syntax"
+# ============================================================
+# COMPATIBILITÉ API V2 (NE PAS SUPPRIMER)
+# ============================================================
+
+def resolve_cname(host):
+    """
+    Wrapper de compatibilité.
+    Retour attendu :
+      (cname, error_type, error_detail)
+    """
+    if not host:
+        return None, "HOST_EMPTY", "Host is empty"
+
+    try:
+        cname = _resolve_cname_internal(host)  # ou ta logique interne
+        if not cname:
+            return None, "CNAME_NOT_FOUND", "No CNAME found for %s" % host
+        return cname, None, None
+    except Exception as e:
+        return None, "CNAME_EXCEPTION", str(e)
+
+
+def resolve_scan(host):
+    """
+    Wrapper de compatibilité.
+    Retour attendu :
+      (scan, error_type, error_detail)
+    """
+    if not host:
+        return None, "HOST_EMPTY", "Host is empty"
+
+    try:
+        scan = _resolve_scan_internal(host)  # ou ta logique interne
+        if not scan:
+            return None, "SCAN_NOT_FOUND", "No SCAN found for %s" % host
+        return scan, None, None
+    except Exception as e:
+        return None, "SCAN_EXCEPTION", str(e)
