@@ -114,6 +114,32 @@ def _status(valid, scan, scan_dr, dirty, dirty_reason,
     return st
 
 # ------------------------------------------------
+def compute_net_side(block, step_prefix, pos, total):
+    """
+    Applique la résolution CNAME / SCAN
+    sur block = {"host":..., "cname":..., "scan":...}
+    """
+    host = block.get("host")
+    if not host:
+        return block, None, None
+
+    show_progress(pos, total, "%s_CNAME" % step_prefix)
+    cname, e1, d1 = resolve_cname(host)
+    if not e1 and cname:
+        block["cname"] = cname
+
+    scan_input = block["cname"] or host
+    show_progress(pos, total, "%s_SCAN" % step_prefix)
+    scan, e2, d2 = resolve_scan(scan_input)
+    if e2:
+        block["scan"] = scan
+        return block, e2, "%s: scan resolution failed for %s | %s" % (
+            step_prefix, scan_input, d2
+        )
+
+    block["scan"] = scan
+    return block, None, None
+# ------------------------------------------------
 def compute_network_block(host, step, pos, total):
     net = {"host": host, "cname": None, "scan": None}
     if not host:
@@ -212,7 +238,26 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
         }
 
     # Résolution CURRENT/NEW
-    net["Current"], e, d = compute_network_block(cur_o.host, "CURRENT", pos, total)
+    # CURRENT
+    for role in ("Primaire", "DR"):
+        net["Current"][role], e, d = compute_net_side(
+            net["Current"][role],
+            "CURRENT_%s" % role.upper(),
+            pos, total
+        )
+        if e and not err_type:
+            err_type, err_detail = e, d
+    
+    # NEW
+    for role in ("Primaire", "DR"):
+        net["New"][role], e, d = compute_net_side(
+            net["New"][role],
+            "NEW_%s" % role.upper(),
+            pos, total
+        )
+    if e and not err_type:
+        err_type, err_detail = e, d
+
     if e:
         err_type, err_detail = e, d
 
