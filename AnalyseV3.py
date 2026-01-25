@@ -330,6 +330,7 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
         }
 
     # Résolution CURRENT
+    print("DEBUG BEFORE CURRENT LOOP", net["Current"])
     for role in ("Primaire", "DR"):
         net["Current"][role], e, d = compute_net_side(
             net["Current"][role],
