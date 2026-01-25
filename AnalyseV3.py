@@ -189,6 +189,32 @@ def fill_net_from_addresses(parsed, net_block):
         # compat V2
         net_block["Primaire"]["host"] = parsed.host
 # ------------------------------------------------
+def build_raw_source(row):
+    """
+    Source brute contractuelle (colonnes métier)
+    → utilisée pour comparaison dirty + affichage ReportV3
+    """
+    raw = {}
+    for c in RAW_COLUMNS:
+        v = row.get(c, u"")
+        if v is None:
+            v = u""
+        raw[c] = ustr(v).strip()
+    return raw
+
+
+# ------------------------------------------------
+def build_raw_debug(row):
+    """
+    Source CSV complète (DEBUG)
+    → ne sert qu’au diagnostic
+    """
+    dbg = {}
+    for k, v in row.items():
+        dbg[ustr(k)] = ustr(v)
+    return dbg
+# ------------------------------------------------
+
 def build_object_v3(row, obj_id, oem_conn, pos, total, force):
 
     raw = build_raw_source(row)
