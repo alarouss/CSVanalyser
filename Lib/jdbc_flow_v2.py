@@ -222,16 +222,29 @@ def resolve_cname(host):
     return host, None, None
 
 # ------------------------------------------------
+def _normalize_host(h):
+    if not h:
+        return None
+    try:
+        h = ustr(h)
+    except:
+        pass
+    return h.strip()
+# ------------------------------------------------
 def resolve_scan(host):
-    import traceback
-    print(">>> resolve_scan CALLED for host =", repr(host))
-    traceback.print_stack(limit=5)
+    """
+    A3 — Normalisation minimale
+    Tant qu’on n’a pas de DNS réel :
+      scan = host normalisé
+    """
+    host = _normalize_host(host)
 
     if not host:
         return None, "HOST_EMPTY", "Host is empty"
 
     try:
         scan = _resolve_scan_internal(host)
+        scan = _normalize_host(scan)
         if not scan:
             return None, "SCAN_NOT_FOUND", "No SCAN found for %s" % host
         return scan, None, None
