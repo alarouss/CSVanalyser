@@ -221,3 +221,12 @@ def resolve_scan(host):
         return scan, None, None
     except Exception as e:
         return None, "SCAN_EXCEPTION", str(e)
+#------------------------------------------------------
+def _resolve_scan_internal(host):
+    """
+    Résolution SCAN minimale (stub).
+    À remplacer plus tard par la vraie logique DNS / SQLNET.
+    """
+    if not host:
+        return None
+    return host
