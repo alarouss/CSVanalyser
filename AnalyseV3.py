@@ -180,54 +180,23 @@ def compute_network_block(host, step, pos, total):
 def fill_net_from_addresses(parsed, net_side):
     """
     Remplit net_side {"Primaire":{}, "DR":{}}
-    à partir de parsed (interpret).
-
-    Règles :
-      - ignore les tokens structurels ("DR", "PRIMARY", etc.)
-      - addresses > host simple
+    à partir de JdbcParsed.addresses (dict structuré)
     """
 
-    if not parsed:
+    if not parsed or not isinstance(parsed.addresses, dict):
         return
 
-    def is_valid_host(h):
-        if not h:
-            return False
-        h = h.strip()
-        # Rejeter mots-clés structurels
-        if h.upper() in ("DR", "PRIMARY", "PRIMAIRE"):
-            return False
-        # Heuristique minimale host
-        return ("." in h) or any(c.isdigit() for c in h)
+    for role in ("Primaire", "DR"):
+        addr = parsed.addresses.get(role)
+        if not addr:
+            continue
 
-    # 1️⃣ Cas addresses structurées
-    addrs = getattr(parsed, "addresses", None)
-    if addrs:
-        if isinstance(addrs, basestring):
-            addrs = [addrs]
+        host = addr.get("host")
+        if not host:
+            continue
 
-        for a in addrs:
-            if isinstance(a, dict):
-                host = a.get("host")
-                role = a.get("role") or "Primaire"
-            else:
-                host = a
-                role = "Primaire"
-
-            if not is_valid_host(host):
-                continue
-
-            if role not in net_side:
-                role = "Primaire"
-
+        if role in net_side:
             net_side[role]["host"] = host
-
-        return
-
-    # 2️⃣ Fallback : host simple
-    host = getattr(parsed, "host", None)
-    if is_valid_host(host):
-        net_side["Primaire"]["host"] = host
 
 # ------------------------------------------------
 def build_raw_source(row):
