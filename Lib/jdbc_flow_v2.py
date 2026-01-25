@@ -2,291 +2,159 @@
 # Lib/jdbc_flow_v2.py
 
 import re
-import subprocess
 
 # ------------------------------------------------
-class JdbcChaine(object):
+class JdbcParsed(object):
     def __init__(self):
-        self.host = None
-        self.port = None
-        self.service_name = None
-        self.type_adresse = None
         self.valide = False
 
-# ------------------------------------------------
-def clean_jdbc(raw):
-    if not raw:
-        return None
-    raw = raw.strip()
-    if '"' in raw:
-        p = raw.split('"')
-        if len(p) >= 2:
-            raw = p[1]
-    return raw.strip()
+        # compat historique : host principal (primaire)
+        self.host = None
+
+        # nouveau modèle : adresses structurées
+        # {"Primaire": {"host":..}, "DR": {"host":..}}
+        self.addresses = {
+            "Primaire": {"host": None},
+            "DR": {"host": None},
+        }
+
+        # debug
+        self.mode = None   # SIMPLE / SQLNET
+        self.raw = None
 
 # ------------------------------------------------
-def parse_simple_jdbc(raw):
-    raw = raw or ""
-    o = JdbcChaine()
-    m = re.search(r'jdbc:oracle:thin:@(.+?):(\d+)[/:](.+)', raw, re.I)
-    if not m:
+def _clean_jdbc(raw):
+    if raw is None:
+        return u""
+    s = raw
+    # raw peut arriver déjà unicode via ustr() côté AnalyseV3
+    try:
+        if isinstance(s, unicode):
+            pass
+        else:
+            # best effort
+            s = s.decode("utf-8", "ignore")
+    except:
+        try:
+            s = unicode(str(s), "utf-8", "ignore")
+        except:
+            s = u""
+
+    s = s.strip()
+
+    # extraire ce qu'il y a entre guillemets si présent
+    if u'"' in s:
+        parts = s.split(u'"')
+        if len(parts) >= 2:
+            s = parts[1].strip()
+
+    return s.strip()
+
+# ------------------------------------------------
+def _parse_simple(s):
+    """
+    Supporte :
+      jdbc:oracle:thin:@host
+      jdbc:oracle:thin:@host:port/service
+      jdbc:oracle:thin:@host:port:sid  (rare)
+    """
+    o = JdbcParsed()
+    sl = (s or u"").lower()
+
+    if "jdbc:oracle:thin:@" not in sl:
         return o
-    o.host = m.group(1).strip()
-    o.port = m.group(2).strip()
-    o.service_name = m.group(3).strip()
-    o.type_adresse = "SCAN" if o.host and o.host.lower().startswith("scan") else "NON_SCAN"
-    o.valide = True
+
+    # récupérer le bloc après @
+    try:
+        after = s.split("@", 1)[1].strip()
+    except:
+        return o
+
+    # couper sur espaces / virgules finales éventuelles
+    after = after.strip().strip(",").strip()
+
+    # cas @host (sans port/service)
+    # ex: @Host_3_1
+    m = re.match(r'^([A-Za-z0-9_.-]+)$', after)
+    if m:
+        host = m.group(1)
+        o.valide = True
+        o.mode = "SIMPLE"
+        o.host = host
+        o.addresses["Primaire"]["host"] = host
+        return o
+
+    # cas @host:port/service  ou @host:port:sid
+    m = re.match(r'^([A-Za-z0-9_.-]+):(\d+)[/:](.+)$', after)
+    if m:
+        host = m.group(1)
+        o.valide = True
+        o.mode = "SIMPLE"
+        o.host = host
+        o.addresses["Primaire"]["host"] = host
+        return o
+
     return o
 
 # ------------------------------------------------
-def parse_sqlnet_jdbc(raw):
-    raw = raw or ""
-    o = JdbcChaine()
-    h = re.search(r'host=([^)]+)', raw, re.I)
-    p = re.search(r'port=(\d+)', raw, re.I)
-    s = re.search(r'service_name=([^)]+)', raw, re.I)
-    if not (h and p and s):
+def _parse_sqlnet(s):
+    """
+    Supporte DESCRIPTION avec une ou plusieurs occurrences de (ADDRESS=... (HOST=...) ...)
+    - 1ère HOST => Primaire
+    - 2ème HOST => DR
+    """
+    o = JdbcParsed()
+    sl = (s or u"").lower()
+    if "(description=" not in sl:
         return o
-    o.host = h.group(1).strip()
-    o.port = p.group(1).strip()
-    o.service_name = s.group(1).strip()
-    o.type_adresse = "SCAN" if o.host and o.host.lower().startswith("scan") else "NON_SCAN"
+
+    # Extraire tous les HOST=... dans l'ordre
+    hosts = []
+    for m in re.finditer(r'host\s*=\s*([^)]+)\)', s, flags=re.I):
+        h = m.group(1).strip()
+        if h:
+            hosts.append(h)
+
+    if not hosts:
+        return o
+
     o.valide = True
+    o.mode = "SQLNET"
+    o.host = hosts[0]
+    o.addresses["Primaire"]["host"] = hosts[0]
+    if len(hosts) >= 2:
+        o.addresses["DR"]["host"] = hosts[1]
+
     return o
-
-# ------------------------------------------------
-def parse_jdbc(raw):
-    o = parse_simple_jdbc(raw)
-    if o.valide:
-        return o
-    return parse_sqlnet_jdbc(raw)
-
-# ------------------------------------------------
-# ------------------------------------------------
-# EXTENSION MULTI ADDRESS_LIST – Oracle SQLNet
-# Compatible Python 2.6 – sans regression
-# ------------------------------------------------
-
-
-
-class ParsedJdbc(object):
-    def __init__(self):
-        self.valide = False
-        self.host = None
-        self.port = None
-        self.service = None
-        self.addresses = []   # NOUVEAU (liste complète)
 
 # ------------------------------------------------
 def interpret(raw):
     """
-    Interprétation JDBC Oracle.
-
-    Compatibilité totale V2 :
-      - obj.host
-      - obj.port
-      - obj.service_name
-      - obj.valide
-
-    Extension V3 :
-      - obj.addresses = [
-            {"role": "Primaire", "host": "...", "port": "..."},
-            {"role": "DR",       "host": "...", "port": "..."}
-        ]
+    Point d'entrée utilisé par AnalyseV3.
+    Doit rester rétro-compatible :
+      - o.host (primaire)
+      - o.valide
+      - o.addresses["Primaire"]["host"], o.addresses["DR"]["host"]
     """
+    o = JdbcParsed()
+    s = _clean_jdbc(raw)
+    o.raw = s
 
-    class Parsed(object):
-        def __init__(self):
-            self.host = None
-            self.port = None
-            self.service_name = None
-            self.valide = False
-            self.addresses = []
+    if not s:
+        # chaîne vide => pas une erreur de syntaxe, juste N/A
+        o.valide = False
+        o.mode = "EMPTY"
+        return o, "EMPTY", "Empty JDBC string"
 
-    obj = Parsed()
+    # 1) essayer simple
+    os = _parse_simple(s)
+    if os.valide:
+        return os, None, None
 
-    if not raw:
-        return obj, "EMPTY", "Empty JDBC string"
+    # 2) essayer sqlnet
+    on = _parse_sqlnet(s)
+    if on.valide:
+        return on, None, None
 
-    s = raw.strip()
-
-    # -------------------------------
-    # CAS 1 : JDBC SIMPLE
-    # jdbc:oracle:thin:@host:port/service
-    # -------------------------------
-    m = re.search(
-        r'jdbc:oracle:thin:@([^:/()]+):(\d+)[/:]([^"\s,)+]+)',
-        s,
-        re.I
-    )
-    if m:
-        h, p, svc = m.group(1), m.group(2), m.group(3)
-
-        obj.host = h
-        obj.port = p
-        obj.service_name = svc
-        obj.valide = True
-
-        obj.addresses.append({
-            "role": "Primaire",
-            "host": h,
-            "port": p
-        })
-
-        return obj, None, None
-
-    # -------------------------------
-    # CAS 2 : SQLNet (DESCRIPTION)
-    # support multi ADDRESS_LIST
-    # -------------------------------
-    if "(description" in s.lower():
-
-        # service_name
-        msvc = re.search(r'service_name\s*=\s*([^)]+)', s, re.I)
-        if msvc:
-            obj.service_name = msvc.group(1).strip()
-
-        # récupération de tous les ADDRESS
-        addr_blocks = re.findall(
-            r'\(\s*address\s*=\s*\(([^)]*)\)\s*\)',
-            s,
-            re.I
-        )
-
-        seq = 0
-        for block in addr_blocks:
-            mh = re.search(r'host\s*=\s*([^)]+)', block, re.I)
-            mp = re.search(r'port\s*=\s*([^)]+)', block, re.I)
-
-            if not mh:
-                continue
-
-            h = mh.group(1).strip()
-            p = mp.group(1).strip() if mp else None
-
-            role = "Primaire" if seq == 0 else "DR"
-
-            obj.addresses.append({
-                "role": role,
-                "host": h,
-                "port": p
-            })
-
-            # compat V2
-            if seq == 0:
-                obj.host = h
-                obj.port = p
-
-            seq += 1
-
-        if obj.addresses:
-            obj.valide = True
-            return obj, None, None
-
-    # -------------------------------
-    # ÉCHEC
-    # -------------------------------
-    return obj, "SYNTAX_ERROR", "Unrecognized JDBC syntax"
-
-# ------------------------------------------------
-def resolve_cname(host):
-    try:
-        if not host:
-            return None, "CNAME_HOST_NONE", "Host is None"
-
-        p = subprocess.Popen(["nslookup", host],
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE)
-        out, err = p.communicate()
-        output = out.decode("utf-8", "ignore")
-
-        for l in output.splitlines():
-            l = l.strip()
-            if l.startswith("Nom") or l.startswith("Name"):
-                v = l.split(":", 1)[1].strip()
-                if "," in v:
-                    v = v.split(",")[0].strip()
-                return v, None, None
-
-        return None, "CNAME_ERROR", "No Name in nslookup for " + host
-
-    except Exception as e:
-        return None, "CNAME_EXCEPTION", str(e)
-
-# ------------------------------------------------
-def resolve_scan(host):
-    """
-    LOGIQUE ORACLE CORRECTE :
-
-    host -> nslookup -> cname
-         -> srvctl sur cname -> scan réel
-    """
-    try:
-        if not host:
-            return None, "HOST_NONE", "Host is None"
-
-        # --- 1) CNAME ---
-        p = subprocess.Popen(["nslookup", host],
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE)
-        out, err = p.communicate()
-        output = out.decode("utf-8", "ignore")
-
-        cname = None
-        for l in output.splitlines():
-            l = l.strip()
-            if l.startswith("Nom") or l.startswith("Name"):
-                cname = l.split(":", 1)[1].strip()
-                if "," in cname:
-                    cname = cname.split(",")[0].strip()
-                break
-
-        if not cname:
-            return None, "CNAME_ERROR", "No Name in nslookup for " + host
-
-        # --- 2) SRVCTL ---
-        cmd = [
-            "ssh",
-            "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=/dev/null",
-            "oracle@%s" % cname,
-            ". /home/oracle/.bash_profile ; srvctl config scan"
-        ]
-
-        p = subprocess.Popen(cmd,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE)
-        out, err = p.communicate()
-        output = out.decode("utf-8", "ignore")
-
-        for l in output.splitlines():
-            l = l.strip()
-            if l.startswith("SCAN name"):
-                v = l.split(":", 1)[1].strip()
-                if "," in v:
-                    v = v.split(",")[0].strip()
-                return v, None, None
-
-        return None, "SRVCTL_ERROR", "No SCAN in srvctl for " + cname
-
-    except Exception as e:
-        return None, "SCAN_EXCEPTION", str(e)
-
-# ------------------------------------------------
-def normalize_scan_name(n):
-    if not n:
-        return None
-    n = n.strip()
-    if "," in n:
-        n = n.split(",")[0].strip()
-    if "." in n:
-        n = n.split(".")[0].strip()
-    return n.lower()
-
-# ------------------------------------------------
-def compare(a, b):
-    na = normalize_scan_name(a)
-    nb = normalize_scan_name(b)
-    if not na or not nb:
-        return None
-    return na == nb
+    # 3) sinon : syntaxe inconnue
+    return o, "SYNTAX_ERROR", "Invalid JDBC syntax"
