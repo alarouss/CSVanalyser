@@ -90,17 +90,24 @@ def color_dirty(v):
 
 def compute_block_status(block, applicable=True):
     """
-    Retourne un tuple (label_affiche, brut)
+    block peut être :
+      - ancien format: {"host":..,"cname":..,"scan":..}
+      - nouveau format: {"Primaire":{...},"DR":{...}}
     """
+
     if not applicable:
         return color_na(), "N/A"
 
     if not block:
         return color_na(), "N/A"
 
-    host = block.get("host")
+    # 🔽 NOUVEAU : descente automatique vers Primaire
+    if "Primaire" in block and isinstance(block["Primaire"], dict):
+        block = block.get("Primaire", {})
+
+    host  = block.get("host")
     cname = block.get("cname")
-    scan = block.get("scan")
+    scan  = block.get("scan")
 
     if not host:
         return color_na(), "N/A"
