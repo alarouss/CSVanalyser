@@ -140,6 +140,16 @@ def compute_net_side(block, step_prefix, pos, total):
     block["scan"] = scan
     return block, None, None
 # ------------------------------------------------
+def compute_block_status(block, had_error):
+    """
+    Déduit le statut logique d’un bloc réseau
+    """
+    if not block.get("host"):
+        return "N/A"
+    if had_error:
+        return "ERROR"
+    return "OK"
+# ------------------------------------------------
 def compute_network_block(host, step, pos, total):
     net = {"host": host, "cname": None, "scan": None}
     if not host:
@@ -186,13 +196,10 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
 
     cur = raw.get("Current connection string")
     new = raw.get("New connection string")
-    dr  = raw.get("New connection string avec DR")
 
     cur_o, ecur, dcur = interpret(cur)
     new_o, enew, dnew = interpret(new)
-    dr_o,  edr,  ddr  = interpret(dr)
 
-    # Network complet toujours présent (même si None)
     net = {
         "Current": {
             "Primaire": {"host": None, "cname": None, "scan": None},
@@ -211,34 +218,29 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
     fill_net_from_addresses(cur_o, net["Current"])
     fill_net_from_addresses(new_o, net["New"])
 
-    # Validité syntaxe : current + new obligatoires
-    valid = bool(cur_o and cur_o.valide and new_o and new_o.valide)
+    valid = bool(cur_o.valide and new_o.valide)
 
     err_type = None
     err_detail = None
 
-    # Si syntaxe invalide -> pas de réseau, status ERROR propre
     if not valid:
-        err_type = "SYNTAX_ERROR"
-        err_detail = "Invalid JDBC syntax (Current/New)"
-        scan_status = "ERROR"
-        scan_dr_status = None
-
-        status = build_status(False, scan_status, scan_dr_status,
-                              False, None, err_type, err_detail,
-                              "FORCE_UPDATE" if force else "AUTO")
-
+        status = build_status(
+            False, "ERROR", None,
+            False, None,
+            "SYNTAX_ERROR",
+            "Invalid JDBC syntax",
+            "FORCE_UPDATE" if force else "AUTO"
+        )
         return {
             "id": obj_id,
-            "OEM": net["OEM"],
             "Network": net,
+            "OEM": net["OEM"],
             "Status": status,
             "RawSource": raw,
             "RawSource_DEBUG": raw_debug
         }
 
-    # Résolution CURRENT/NEW
-    # CURRENT
+    # Résolution CURRENT
     for role in ("Primaire", "DR"):
         net["Current"][role], e, d = compute_net_side(
             net["Current"][role],
@@ -247,76 +249,50 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
         )
         if e and not err_type:
             err_type, err_detail = e, d
-    
-    # NEW
+
+    # Résolution NEW
     for role in ("Primaire", "DR"):
         net["New"][role], e, d = compute_net_side(
             net["New"][role],
             "NEW_%s" % role.upper(),
             pos, total
         )
-    if e and not err_type:
-        err_type, err_detail = e, d
+        if e and not err_type:
+            err_type, err_detail = e, d
 
-    if e:
-        err_type, err_detail = e, d
-
-    net["New"], e, d = compute_network_block(new_o.host, "NEW", pos, total)
-    if e and not err_type:
-        err_type, err_detail = e, d
-
-    # Compare
+    # Comparaison référence = Current / Primaire
     if err_type:
         scan_status = "ERROR"
     else:
-        eq = compare(net["Current"].get("scan"), net["New"].get("scan"))
-        if eq is None:
-            scan_status = "ERROR"
-            err_type = "SCAN_COMPARE_ERROR"
-            err_detail = "Normalization failed"
-        else:
-            scan_status = "VALIDE" if eq else "DIFFERENT"
-            if not eq:
-                err_type = "SCAN_DIFFERENT"
-                err_detail = "Current and New SCAN differ"
+        eq = compare(
+            net["Current"]["Primaire"]["scan"],
+            net["New"]["Primaire"]["scan"]
+        )
+        scan_status = "VALIDE" if eq else "DIFFERENT"
+        if not eq:
+            err_type = "SCAN_DIFFERENT"
+            err_detail = "Current and New SCAN differ"
 
-    # DR optionnel
     scan_dr_status = None
-    if dr_o and dr_o.valide:
-        net["NewDR"], ed, dd = compute_network_block(dr_o.host, "NEWDR", pos, total)
-        if ed:
-            scan_dr_status = "ERROR"
-        else:
-            eqdr = compare(net["Current"].get("scan"), net["NewDR"].get("scan"))
-            scan_dr_status = "VALIDE" if eqdr else "DIFFERENT"
-
-    # OEM
-    oem_err_type = None
-    oem_err_detail = None
-
-    show_progress(pos, total, "OEM_SQLPLUS")
-    dbname = ustr_csv(raw.get("Databases", u"")).strip()
-    if not dbname:
-        oem_err_type = "OEM_DBNAME_EMPTY"
-        oem_err_detail = "Databases column empty"
+    if net["New"]["DR"]["host"]:
+        eqdr = compare(
+            net["Current"]["Primaire"]["scan"],
+            net["New"]["DR"]["scan"]
+        )
+        scan_dr_status = "VALIDE" if eqdr else "DIFFERENT"
     else:
-        oh, op, oe, od = oem_get_host_and_port(oem_conn, dbname)
-        if oe:
-            oem_err_type, oem_err_detail = oe, od
-        else:
-            net["OEM"]["host"] = oh
-            net["OEM"]["port"] = op
-            net_oem, eo, do = compute_network_block(oh, "OEM", pos, total)
-            net["OEM"]["cname"] = net_oem.get("cname")
-            net["OEM"]["scan"]  = net_oem.get("scan")
-            if eo and not oem_err_type:
-                oem_err_type, oem_err_detail = eo, do
+        scan_dr_status = "N/A"
 
-    status = build_status(True, scan_status, scan_dr_status,
-                          False, None,
-                          err_type, err_detail,
-                          "FORCE_UPDATE" if force else "AUTO",
-                          oem_err_type, oem_err_detail)
+    status = build_status(
+        True,
+        scan_status,
+        scan_dr_status,
+        False,
+        None,
+        err_type,
+        err_detail,
+        "FORCE_UPDATE" if force else "AUTO"
+    )
 
     return {
         "id": obj_id,
