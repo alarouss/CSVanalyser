@@ -126,6 +126,32 @@ def _parse_sqlnet(s):
         o.addresses["DR"]["host"] = hosts[1]
 
     return o
+# ------------------------------------------------
+def compare(scan1, scan2):
+    """
+    Comparaison normalisée des SCAN.
+    Retour :
+      True  : identiques
+      False : différents
+      None  : comparaison impossible
+    """
+    if not scan1 or not scan2:
+        return None
+
+    try:
+        s1 = unicode(scan1).strip().lower()
+        s2 = unicode(scan2).strip().lower()
+    except:
+        try:
+            s1 = str(scan1).strip().lower()
+            s2 = str(scan2).strip().lower()
+        except:
+            return None
+
+    if not s1 or not s2:
+        return None
+
+    return s1 == s2
 
 # ------------------------------------------------
 def interpret(raw):
