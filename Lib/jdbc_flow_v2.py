@@ -209,18 +209,23 @@ def interpret(raw):
 # ============================================================
 # COMPATIBILITÉ API V2 (NE PAS SUPPRIMER)
 # ============================================================
-
 def resolve_cname(host):
     """
-    Stub CNAME.
-    Retour : (cname, error_type, error_detail)
+    A4 — Résolution CNAME minimale (stub)
+    Pour l’instant :
+      cname = host normalisé
     """
+    host = _normalize_host(host)
+
     if not host:
         return None, "HOST_EMPTY", "Host is empty"
 
-    # stub : on considère que le host est déjà un cname
-    return host, None, None
-
+    try:
+        # stub : identité
+        cname = host
+        return cname, None, None
+    except Exception as e:
+        return None, "CNAME_EXCEPTION", str(e)
 # ------------------------------------------------
 def _normalize_host(h):
     if not h:
