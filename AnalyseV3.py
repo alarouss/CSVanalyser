@@ -173,21 +173,40 @@ def compute_network_block(host, step, pos, total):
     return net, None, None
 
 # ------------------------------------------------
-def fill_net_from_addresses(parsed, net_block):
+def fill_net_from_addresses(parsed, net_side):
     """
-    Remplit net_block["Primaire"] / net_block["DR"]
-    à partir de parsed.addresses
+    Remplit net_side {"Primaire":{}, "DR":{}} à partir de parsed (interpret)
+    parsed.addresses peut être :
+      - None
+      - string
+      - liste de strings
+      - liste de dicts {host, role}
+    """
 
-    Fallback automatique si addresses absent
-    """
-    if hasattr(parsed, "addresses") and parsed.addresses:
-        for a in parsed.addresses:
-            role = a.get("role")
-            if role in net_block:
-                net_block[role]["host"] = a.get("host")
-    else:
-        # compat V2
-        net_block["Primaire"]["host"] = parsed.host
+    if not parsed or not hasattr(parsed, "addresses"):
+        return
+
+    addrs = parsed.addresses
+
+    # Normalisation en liste
+    if isinstance(addrs, basestring):
+        addrs = [addrs]
+
+    for a in addrs:
+        # Cas 1 : dict structuré
+        if isinstance(a, dict):
+            role = a.get("role", "Primaire")
+            host = a.get("host")
+        # Cas 2 : simple string => Primaire
+        else:
+            role = "Primaire"
+            host = a
+
+        if role not in net_side:
+            continue
+
+        net_side[role]["host"] = host
+
 # ------------------------------------------------
 def build_raw_source(row):
     """
