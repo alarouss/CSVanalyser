@@ -205,64 +205,19 @@ def resolve_cname(host):
     except Exception as e:
         return None, "CNAME_EXCEPTION", str(e)
 
-
+# ------------------------------------------------
 def resolve_scan(host):
-    """
-    Résolution SCAN (V2 historique, sans dépendance cachée)
+    import traceback
+    print(">>> resolve_scan CALLED for host =", repr(host))
+    traceback.print_stack(limit=5)
 
-    Retour :
-      (scan, error_type, error_detail)
-    """
     if not host:
         return None, "HOST_EMPTY", "Host is empty"
 
     try:
-        # Cas 1 : le host est déjà un SCAN → nslookup direct
-        if "scan" in host.lower():
-            p = subprocess.Popen(
-                ["nslookup", host],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            out, err = p.communicate()
-            output = out.decode("utf-8", "ignore")
-
-            for l in output.splitlines():
-                l = l.strip()
-                if l.startswith("Nom") or l.startswith("Name"):
-                    v = l.split(":", 1)[1].strip()
-                    if "," in v:
-                        v = v.split(",")[0].strip()
-                    return v, None, None
-
-            return None, "SCAN_NOT_FOUND", "No SCAN in nslookup for %s" % host
-
-        # Cas 2 : host classique → srvctl
-        cmd = [
-            "ssh",
-            "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=/dev/null",
-            "oracle@%s" % host,
-            ". /home/oracle/.bash_profile ; srvctl config scan"
-        ]
-
-        p = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        out, err = p.communicate()
-        output = out.decode("utf-8", "ignore")
-
-        for l in output.splitlines():
-            l = l.strip()
-            if l.startswith("SCAN name"):
-                v = l.split(":", 1)[1].strip()
-                if "," in v:
-                    v = v.split(",")[0].strip()
-                return v, None, None
-
-        return None, "SCAN_NOT_FOUND", "No SCAN via srvctl for %s" % host
-
+        scan = _resolve_scan_internal(host)
+        if not scan:
+            return None, "SCAN_NOT_FOUND", "No SCAN found for %s" % host
+        return scan, None, None
     except Exception as e:
         return None, "SCAN_EXCEPTION", str(e)
