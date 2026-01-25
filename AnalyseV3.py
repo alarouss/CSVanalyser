@@ -80,20 +80,20 @@ def normalize_row(row):
     return out
 
 # ------------------------------------------------
-def build_raw_source(row):
+def _raw_source(row):
     raw = {}
     for c in RAW_COLUMNS:
         raw[c] = ustr_csv(row.get(c, u"")).strip()
     return raw
 
-def build_raw_debug(row):
+def _raw_debug(row):
     dbg = {}
     for k, v in row.items():
         dbg[ustr_csv(k)] = ustr_csv(v)
     return dbg
 
 # ------------------------------------------------
-def build_status(valid, scan, scan_dr, dirty, dirty_reason,
+def _status(valid, scan, scan_dr, dirty, dirty_reason,
                  err_type, err_detail, mode,
                  oem_err_type=None, oem_err_detail=None):
 
@@ -137,6 +137,22 @@ def compute_network_block(host, step, pos, total):
     return net, None, None
 
 # ------------------------------------------------
+def fill_net_from_addresses(parsed, net_block):
+    """
+    Remplit net_block["Primaire"] / net_block["DR"]
+    à partir de parsed.addresses
+
+    Fallback automatique si addresses absent
+    """
+    if hasattr(parsed, "addresses") and parsed.addresses:
+        for a in parsed.addresses:
+            role = a.get("role")
+            if role in net_block:
+                net_block[role]["host"] = a.get("host")
+    else:
+        # compat V2
+        net_block["Primaire"]["host"] = parsed.host
+# ------------------------------------------------
 def build_object_v3(row, obj_id, oem_conn, pos, total, force):
 
     raw = build_raw_source(row)
@@ -152,11 +168,22 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
 
     # Network complet toujours présent (même si None)
     net = {
-        "OEM":     {"host": None, "port": None, "cname": None, "scan": None},
-        "Current": {"host": cur_o.host, "cname": None, "scan": None},
-        "New":     {"host": new_o.host, "cname": None, "scan": None},
-        "NewDR":   {"host": dr_o.host,  "cname": None, "scan": None}
+        "Current": {
+            "Primaire": {"host": None, "cname": None, "scan": None},
+            "DR":       {"host": None, "cname": None, "scan": None},
+        },
+        "New": {
+            "Primaire": {"host": None, "cname": None, "scan": None},
+            "DR":       {"host": None, "cname": None, "scan": None},
+        },
+        "OEM": {
+            "Primaire": {"host": None, "port": None, "cname": None, "scan": None},
+            "DR":       {"host": None, "port": None, "cname": None, "scan": None},
+        }
     }
+
+    fill_net_from_addresses(cur_o, net["Current"])
+    fill_net_from_addresses(new_o, net["New"])
 
     # Validité syntaxe : current + new obligatoires
     valid = bool(cur_o and cur_o.valide and new_o and new_o.valide)
