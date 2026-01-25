@@ -175,15 +175,37 @@ def interpret(raw):
     # 1) essayer simple
     os = _parse_simple(s)
     if os.valide:
-        return os, None, None
+        o = os
+    else:
+        # 2) essayer sqlnet
+        on = _parse_sqlnet(s)
+        if on.valide:
+            o = on
+        else:
+            # 3) sinon : syntaxe inconnue
+            return o, "SYNTAX_ERROR", "Invalid JDBC syntax"
 
-    # 2) essayer sqlnet
-    on = _parse_sqlnet(s)
-    if on.valide:
-        return on, None, None
+    # ===============================
+    # 🔒 NORMALISATION CONTRAT (A2)
+    # ===============================
 
-    # 3) sinon : syntaxe inconnue
-    return o, "SYNTAX_ERROR", "Invalid JDBC syntax"
+    # Primaire : priorité à o.host (historique)
+    if o.host:
+        o.addresses.setdefault("Primaire", {})
+        if not o.addresses["Primaire"].get("host"):
+            o.addresses["Primaire"]["host"] = o.host
+
+    # Si Primaire existe mais o.host absent → rétro-sync
+    if not o.host:
+        h = o.addresses.get("Primaire", {}).get("host")
+        if h:
+            o.host = h
+
+    # DR : on ne force RIEN
+    # (sera rempli uniquement par le parseur sqlnet si applicable)
+
+    return o, None, None
+
 # ============================================================
 # COMPATIBILITÉ API V2 (NE PAS SUPPRIMER)
 # ============================================================
