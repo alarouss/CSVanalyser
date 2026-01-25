@@ -123,24 +123,30 @@ def compute_net_side(block, step_prefix, pos, total):
     if not host:
         return block, None, None
 
-    show_progress(pos, total, "%s_CNAME" % step_prefix)
-    cname, e1, d1 = resolve_cname(host)
-    if not e1 and cname:
-        block["cname"] = cname
-
-    scan_input =  host
-    show_progress(pos, total, "%s_SCAN" % step_prefix)
     if host in ("DR", "Primaire"):
         raise Exception("INVARIANT VIOLATION: host=%r" % host)
-    scan, e2, d2 = resolve_scan(scan_input)
+
+    # ---------- CNAME ----------
+    show_progress(pos, total, "%s_CNAME" % step_prefix)
+    cname, e1, d1 = resolve_cname(host)
+    if e1:
+        return block, "CNAME_ERROR", "%s: cname resolution failed for %s | %s" % (
+            step_prefix, host, d1
+        )
+
+    block["cname"] = cname
+
+    # ---------- SCAN ----------
+    show_progress(pos, total, "%s_SCAN" % step_prefix)
+    scan, e2, d2 = resolve_scan(cname)
     if e2:
-        block["scan"] = scan
-        return block, e2, "%s: scan resolution failed for %s | %s" % (
-            step_prefix, scan_input, d2
+        return block, "SCAN_ERROR", "%s: scan resolution failed for %s | %s" % (
+            step_prefix, cname, d2
         )
 
     block["scan"] = scan
     return block, None, None
+
 # ------------------------------------------------
 def compute_block_status(block, had_error):
     """
