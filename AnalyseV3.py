@@ -130,6 +130,8 @@ def compute_net_side(block, step_prefix, pos, total):
 
     scan_input =  host
     show_progress(pos, total, "%s_SCAN" % step_prefix)
+    if host in ("DR", "Primaire"):
+        raise Exception("INVARIANT VIOLATION: host=%r" % host)
     scan, e2, d2 = resolve_scan(scan_input)
     if e2:
         block["scan"] = scan
@@ -162,6 +164,8 @@ def compute_network_block(host, step, pos, total):
 
     scan_input = net["cname"] or host
     show_progress(pos, total, "%s_SCAN" % step)
+    if host in ("DR", "Primaire"):
+        raise Exception("INVARIANT VIOLATION: host=%r" % host)
     scan, e2, d2 = resolve_scan(scan_input)
     if e2:
         net["scan"] = scan
