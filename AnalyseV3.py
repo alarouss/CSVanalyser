@@ -128,7 +128,7 @@ def compute_net_side(block, step_prefix, pos, total):
     if not e1 and cname:
         block["cname"] = cname
 
-    scan_input = block["cname"] or host
+    scan_input =  host
     show_progress(pos, total, "%s_SCAN" % step_prefix)
     scan, e2, d2 = resolve_scan(scan_input)
     if e2:
