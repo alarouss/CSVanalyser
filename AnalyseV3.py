@@ -214,6 +214,28 @@ def build_raw_debug(row):
         dbg[ustr(k)] = ustr(v)
     return dbg
 # ------------------------------------------------
+def build_status(valid, scan, scan_dr, dirty, dirty_reason,
+                 err_type, err_detail, mode,
+                 oem_err_type=None, oem_err_detail=None):
+
+    st = {
+        "ValidSyntax": bool(valid),
+        "ScanCompare": scan,
+        "ScanCompareDR": scan_dr,
+        "Dirty": bool(dirty),
+        "DirtyReason": dirty_reason,
+        "ErrorType": err_type,
+        "ErrorDetail": err_detail,
+        "Mode": mode,
+        "LastUpdateTime": time.strftime("%Y-%m-%d %H:%M:%S")
+    }
+
+    if oem_err_type or oem_err_detail:
+        st["OEMErrorType"] = oem_err_type
+        st["OEMErrorDetail"] = oem_err_detail
+
+    return st
+# ------------------------------------------------
 
 def build_object_v3(row, obj_id, oem_conn, pos, total, force):
 
