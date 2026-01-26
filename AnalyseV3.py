@@ -192,6 +192,7 @@ if __name__ == "__main__":
     sys.stdout.write("\n")
 
     store["objects"] = keep + objs
+    print("DEBUG FINAL OBJECT =", objs[-1]["Network"]["New"]["DR"])
     save_store(STORE_FILE, store)
 
     print "\nAnalyseV3 terminé."
