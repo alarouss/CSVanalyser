@@ -235,6 +235,7 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
     # =========================
     # OEM — PRIMAIRE (DEBUG)
     # =========================
+    # 2) OEM — récupération host/port
     if oem_conn:
         oem_host, oem_port, e, d = oem_get_host_and_port(
             oem_conn,
@@ -244,6 +245,15 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
         if not e and oem_host:
             net["OEM"]["Primaire"]["host"] = oem_host
             net["OEM"]["Primaire"]["port"] = oem_port
+    
+    # 3) OEM — résolution réseau (CNAME + SCAN)  👈 ICI
+    if net["OEM"]["Primaire"].get("host"):
+        net["OEM"]["Primaire"], e, d = compute_net_side(
+            net["OEM"]["Primaire"],
+            "OEM_PRIMAIRE",
+            pos, total
+        )
+
 
 
     fill_net_from_addresses(cur_o, net["Current"])
