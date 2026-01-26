@@ -203,19 +203,30 @@ def compute_network_block(host, step, pos, total):
 def fill_net_from_addresses(o, net_side):
     """
     Alimente Primaire / DR à partir des adresses SQLNet
-    Sans validation, sans logique métier
+    Compatible LISTE et DICT
+    Sans logique métier
     """
     if not o or not getattr(o, "addresses", None):
         return
 
-    print "DEBUG addresses type =", type(o.addresses)
-    print "DEBUG addresses value =", o.addresses
+    addrs = o.addresses
 
-    if len(o.addresses) >= 1:
-        net_side["Primaire"]["host"] = o.addresses[0].get("host")
+    # 🔹 CAS 1 : déjà structuré par rôle (dict)
+    if isinstance(addrs, dict):
+        for role in ("Primaire", "DR"):
+            if role in addrs and isinstance(addrs[role], dict):
+                net_side[role]["host"] = addrs[role].get("host")
+        return
 
-    if len(o.addresses) >= 2:
-        net_side["DR"]["host"] = o.addresses[1].get("host")
+    # 🔹 CAS 2 : ancien format liste
+    try:
+        if len(addrs) >= 1:
+            net_side["Primaire"]["host"] = addrs[0].get("host")
+        if len(addrs) >= 2:
+            net_side["DR"]["host"] = addrs[1].get("host")
+    except Exception:
+        # on ne casse jamais l’analyse
+        return
 
 # ------------------------------------------------
 def build_raw_source(row):
