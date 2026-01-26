@@ -292,6 +292,14 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
     fill_net_from_addresses(cur_o, net["Current"])
     fill_net_from_addresses(new_o, net["New"])
 
+    fill_net_from_addresses(cur_o, net["Current"])
+    fill_net_from_addresses(new_o, net["New"])
+    
+    # ===== DEBUG TEMPORAIRE (ETAPE 1) =====
+    print("DEBUG ADDRESSES NEW =", getattr(new_o, "addresses", None))
+    print("DEBUG NET NEW =", net["New"])
+    # =====================================
+
     valid = bool(cur_o.valide and new_o.valide)
 
     err_type = None
