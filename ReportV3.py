@@ -201,17 +201,7 @@ def show_object(o, debug=False):
     rs  = o.get("RawSource", {})
     st  = o.get("Status", {})
     net = o.get("Network", {})
-    print("\nDEBUG id=%s DR O/N=%r" % (o.get("id"), rs.get("DR O/N")))
-    print("DEBUG Network keys =", net.keys())
-    
-    print("DEBUG net['New'] keys =", net.get("New", {}).keys())
-    print("DEBUG net['New']['DR'] =", net.get("New", {}).get("DR"))
-    print("DEBUG net['New']['Primaire'] =", net.get("New", {}).get("Primaire"))
-    
-    print("DEBUG net['Current'] keys =", net.get("Current", {}).keys())
-    print("DEBUG net['OEM'] keys =", net.get("OEM", {}).keys())
 
-    
     print (u"\nID = %s — Database: %s" %
            (o.get("id",""), rs.get("Databases",""))).encode("utf-8")
 
@@ -226,40 +216,25 @@ def show_object(o, debug=False):
     ])
 
     for label, key, app in [
-        ("CURRENT JDBC", "Current", True),
-        ("NEW JDBC", "New", True),
+        ("CURRENT JDBC", ("Current", "Primaire"), True),
+        ("NEW JDBC", ("New", "Primaire"), True),
         ("NEW JDBC DR", ("New", "DR"), True),
-        ("OEM CONN", "OEM", True),
+        ("OEM CONN", ("OEM", "Primaire"), True),
     ]:
         print_section(label)
-        if isinstance(key, tuple):
-            block = net.get(key[0], {}).get(key[1], {})
-        else:
-            block = net.get(key, {})
+
+        block = net.get(key[0], {}).get(key[1], {})
+
         rows = [
             ("Host", block.get("host")),
             ("CNAME", block.get("cname")),
             ("SCAN", block.get("scan")),
-            ("Status", compute_block_status(block, app)[0]),
+            ("Status", compute_block_status(block, True)[0]),
         ]
-        
-        block = net.get(key, {})
 
-        # 🔽 compat nouveau modèle
-        if "Primaire" in block:
-            block_p = block.get("Primaire", {})
-        else:
-            block_p = block
-        
-        rows = [
-            ("Host", block_p.get("host")),
-            ("CNAME", block_p.get("cname")),
-            ("SCAN", block_p.get("scan")),
-            ("Status", compute_block_status(block, app)[0]),
-        ]
-        
-        if key == "OEM":
+        if key[0] == "OEM":
             rows.insert(1, ("Port", block.get("port")))
+
         print_table(rows)
 
     print_section("STATUS")
