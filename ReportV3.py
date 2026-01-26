@@ -201,7 +201,17 @@ def show_object(o, debug=False):
     rs  = o.get("RawSource", {})
     st  = o.get("Status", {})
     net = o.get("Network", {})
+    print("\nDEBUG id=%s DR O/N=%r" % (o.get("id"), rs.get("DR O/N")))
+    print("DEBUG Network keys =", net.keys())
+    
+    print("DEBUG net['New'] keys =", net.get("New", {}).keys())
+    print("DEBUG net['New']['DR'] =", net.get("New", {}).get("DR"))
+    print("DEBUG net['New']['Primaire'] =", net.get("New", {}).get("Primaire"))
+    
+    print("DEBUG net['Current'] keys =", net.get("Current", {}).keys())
+    print("DEBUG net['OEM'] keys =", net.get("OEM", {}).keys())
 
+    
     print (u"\nID = %s — Database: %s" %
            (o.get("id",""), rs.get("Databases",""))).encode("utf-8")
 
