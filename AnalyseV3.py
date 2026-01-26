@@ -208,6 +208,9 @@ def fill_net_from_addresses(o, net_side):
     if not o or not getattr(o, "addresses", None):
         return
 
+    print "DEBUG addresses type =", type(o.addresses)
+    print "DEBUG addresses value =", o.addresses
+
     if len(o.addresses) >= 1:
         net_side["Primaire"]["host"] = o.addresses[0].get("host")
 
