@@ -14,6 +14,11 @@ RAW_COLUMNS = [
     "New connection string avec DR",
     "Cnames", "Services", "Acces", "Cnames DR"
 ]
+DEBUG = False
+
+def set_debug(flag):
+    global DEBUG
+    DEBUG = bool(flag)
 # ------------------------------------------------
 def show_progress(pos, total, step):
     try:
