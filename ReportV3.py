@@ -169,8 +169,10 @@ def print_summary(objs):
 
         cur_s, _ = compute_block_status(net.get("Current"))
         new_s, _ = compute_block_status(net.get("New"))
-        dr_s,  _ = compute_block_status(net.get("NewDR"),
-                        applicable=bool(rs.get("DR O/N")))
+        dr_s, _ = compute_block_status(
+            net.get("New", {}).get("DR"),
+            applicable=bool(rs.get("DR O/N"))
+        )
         oem_s, _ = compute_block_status(net.get("OEM"))
 
         row = [
@@ -216,7 +218,7 @@ def show_object(o, debug=False):
     for label, key, app in [
         ("CURRENT JDBC", "Current", True),
         ("NEW JDBC", "New", True),
-        ("NEW JDBC DR", "NewDR", bool(rs.get("DR O/N"))),
+        ("NEW JDBC DR", ("New", "DR"), bool(rs.get("DR O/N"))),
         ("OEM CONN", "OEM", True),
     ]:
         print_section(label)
