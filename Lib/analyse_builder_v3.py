@@ -231,17 +231,19 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
     # =========================
     # OEM — PRIMAIRE (ETAPE 1)
     # =========================
+    # =========================
+    # OEM — PRIMAIRE (DEBUG)
+    # =========================
     if oem_conn:
-        try:
-            oem_host, oem_port, e, d = oem_get_host_and_port(
-                oem_conn,
-                raw.get("Databases")
-            )
-            if not e and oem_host:
-                net["OEM"]["Primaire"]["host"] = oem_host
-                net["OEM"]["Primaire"]["port"] = oem_port
-        except Exception:
-            pass
+        oem_host, oem_port, e, d = oem_get_host_and_port(
+            oem_conn,
+            raw.get("Databases")
+        )
+        print("DEBUG OEM:", oem_host, oem_port, e, d)
+        if not e and oem_host:
+            net["OEM"]["Primaire"]["host"] = oem_host
+            net["OEM"]["Primaire"]["port"] = oem_port
+
 
     fill_net_from_addresses(cur_o, net["Current"])
     fill_net_from_addresses(new_o, net["New"])
