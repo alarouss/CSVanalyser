@@ -183,26 +183,36 @@ def compute_network_block(host, step, pos, total):
     return net, None, None
 
 # ------------------------------------------------
-def fill_net_from_addresses(parsed, net_side):
+#def fill_net_from_addresses(parsed, net_side):
     """
     Remplit net_side {"Primaire":{}, "DR":{}}
     à partir de JdbcParsed.addresses (dict structuré)
     """
 
-    if not parsed or not isinstance(parsed.addresses, dict):
+#    if not parsed or not isinstance(parsed.addresses, dict):
+#        return
+#    for role in ("Primaire", "DR"):
+#        addr = parsed.addresses.get(role)
+#        if not addr:
+#            continue
+#        host = addr.get("host")
+#        if not host:
+#            continue
+#        if role in net_side:
+#            net_side[role]["host"] = host
+def fill_net_from_addresses(o, net_side):
+    """
+    Alimente Primaire / DR à partir des adresses SQLNet
+    Sans validation, sans logique métier
+    """
+    if not o or not getattr(o, "addresses", None):
         return
 
-    for role in ("Primaire", "DR"):
-        addr = parsed.addresses.get(role)
-        if not addr:
-            continue
+    if len(o.addresses) >= 1:
+        net_side["Primaire"]["host"] = o.addresses[0].get("host")
 
-        host = addr.get("host")
-        if not host:
-            continue
-
-        if role in net_side:
-            net_side[role]["host"] = host
+    if len(o.addresses) >= 2:
+        net_side["DR"]["host"] = o.addresses[1].get("host")
 
 # ------------------------------------------------
 def build_raw_source(row):
