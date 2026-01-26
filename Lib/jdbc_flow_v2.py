@@ -185,13 +185,28 @@ def resolve_cname(host):
 
     for l in out_u.splitlines():
         s = l.strip().lower()
+
+        # canonical name = xxx.
         if s.startswith("canonical name"):
-            return _normalize_host(l.split("=", 1)[1]), None, None
+            v = l.split("=", 1)[1].strip()
+            if "," in v:
+                v = v.split(",", 1)[0].strip()
+            if v.endswith("."):
+                v = v[:-1]
+            return _normalize_host(v), None, None
+
+        # Name: xxx
         if s.startswith("name") or s.startswith("nom"):
             if ":" in l:
-                return _normalize_host(l.split(":", 1)[1]), None, None
+                v = l.split(":", 1)[1].strip()
+                if "," in v:
+                    v = v.split(",", 1)[0].strip()
+                if v.endswith("."):
+                    v = v[:-1]
+                return _normalize_host(v), None, None
 
     return None, "CNAME_NOT_FOUND", "No cname for %s" % host
+
 
 def resolve_scan(host):
     host = _normalize_host(host)
