@@ -232,7 +232,15 @@ def resolve_scan(host):
         return None, "SRVCTL_ERROR", err_u
 
     for l in out_u.splitlines():
-        if l.lower().startswith("scan name"):
-            return _normalize_host(l.split(":", 1)[1]), None, None
+        s = l.strip()
+        if s.lower().startswith("scan name"):
+            v = s.split(":", 1)[1].strip()
+            # 🔧 nettoyage critique
+            if "," in v:
+                v = v.split(",", 1)[0].strip()
+            if v.endswith("."):
+                v = v[:-1]
+            if v:
+                return _normalize_host(v), None, None
 
     return None, "SCAN_NOT_FOUND", "No SCAN for %s" % cname
