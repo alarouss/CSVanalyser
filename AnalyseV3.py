@@ -13,8 +13,7 @@ from Lib.oem_flow import oem_get_host_and_port
 
 # IMPORTS APRÈS DÉCOUPAGE (OBLIGATOIRES)
 from Lib.analyse_builder_v3 import build_object_v3, normalize_row, set_debug
-#DEBUG = False
-DEBUG = ("-debug" in args)
+DEBUG = False
 # ------------------------------------------------
 def print_help():
     print """AnalyseV3.py
@@ -96,6 +95,7 @@ if __name__ == "__main__":
 
     force = ("-force" in args) or ("-update" in args) or ("-upgrade" in args)
     DEBUG = ("-debug" in args)
+    set_debug(DEBUG)
 
     conf, ce, cd = load_main_conf()
     if ce:
