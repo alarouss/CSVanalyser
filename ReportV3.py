@@ -228,7 +228,7 @@ def show_object(o, debug=False):
     for label, key, app in [
         ("CURRENT JDBC", "Current", True),
         ("NEW JDBC", "New", True),
-        ("NEW JDBC DR", ("New", "DR"), bool(rs.get("DR O/N"))),
+        ("NEW JDBC DR", ("New", "DR"), True),
         ("OEM CONN", "OEM", True),
     ]:
         print_section(label)
