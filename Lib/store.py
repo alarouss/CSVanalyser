@@ -5,6 +5,7 @@ import os
 import json
 
 def load_store(store_file):
+    
     if not os.path.isfile(store_file):
         return {"objects": []}
 
@@ -12,6 +13,7 @@ def load_store(store_file):
     return json.loads(data)
 
 def save_store(store_file, store):
+    print("DEBUG FINAL OBJECT =", objs[-1]["Network"]["New"]["DR"])
     open(store_file, "wb").write(
         json.dumps(store, indent=2, ensure_ascii=False).encode("utf-8")
     )
