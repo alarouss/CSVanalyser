@@ -113,9 +113,11 @@ def compute_block_status(block, applicable=True):
         return color_na(), "N/A"
 
     # erreurs explicites
+    if not applicable:
+        return color_na(), "N/A"
     if cname is None and scan is None:
-        return color_err("SYNTAX_ERROR"), "SYNTAX_ERROR"
-
+        return color_na(), "N/A"
+        
     if cname is None:
         return color_err("CNAME_ERROR"), "CNAME_ERROR"
 
