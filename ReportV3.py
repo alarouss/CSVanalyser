@@ -137,9 +137,24 @@ FILTER_FIELDS = {
                         o.get("RawSource", {}).get("Statut Global"))),
     "Dirty":       lambda o: "YES" if o.get("Status", {}).get("Dirty") else "NO",
 }
+def pager_wait():
+    sys.stdout.write("\n-- More -- (SPACE to continue, q to quit)")
+    sys.stdout.flush()
+    try:
+        ch = sys.stdin.read(1)
+    except:
+        return True
+    sys.stdout.write("\r" + " " * 40 + "\r")
+    sys.stdout.flush()
+    if ch.lower() == "q":
+        return False
+    return True
 
 def print_summary(objs):
     print_section("SUMMARY - JDBC ANALYSIS")
+
+    PAGE_SIZE = 30
+    line_count = 0
 
     headers = [
         ("ID",4),
@@ -161,17 +176,26 @@ def print_summary(objs):
     for h,w in headers:
         line += pad(h,w) + u" | "
         sep  += u"-"*w + u"-+-"
+
     print line[:-3].encode("utf-8")
     print sep[:-3].encode("utf-8")
+    line_count += 2
 
     for o in objs:
+        if line_count >= PAGE_SIZE:
+            if not pager_wait():
+                return
+            print line[:-3].encode("utf-8")
+            print sep[:-3].encode("utf-8")
+            line_count = 2
+
         rs = o.get("RawSource", {})
         st = o.get("Status", {})
         net = o.get("Network", {})
 
         cur_s, _ = compute_block_status(net.get("Current"))
         new_s, _ = compute_block_status(net.get("New"))
-        dr_s, _ = compute_block_status(
+        dr_s,  _ = compute_block_status(
             net.get("New", {}).get("DR"),
             applicable=bool(rs.get("DR O/N"))
         )
@@ -192,10 +216,12 @@ def print_summary(objs):
             color_dirty(st.get("Dirty")),
         ]
 
-        out=u" "
+        out = u" "
         for (val,(h,w)) in zip(row,headers):
             out += pad(val,w) + u" | "
+
         print out[:-3].encode("utf-8")
+        line_count += 1
 
 # ================= DETAIL =================
 
