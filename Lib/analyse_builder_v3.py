@@ -229,17 +229,18 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
 
     fill_net_from_addresses(cur_o, net["Current"])
     fill_net_from_addresses(new_o, net["New"])
-    
-    # ===== DEBUG TEMPORAIRE (ETAPE 1) =====
-    print("DEBUG ADDRESSES NEW =", getattr(new_o, "addresses", None))
-    print("DEBUG NET NEW =", net["New"])
-    # =====================================
+    if DEBUG:
+        # ===== DEBUG TEMPORAIRE (ETAPE 1) =====
+        print("DEBUG ADDRESSES NEW =", getattr(new_o, "addresses", None))
+        print("DEBUG NET NEW =", net["New"])
+        # =====================================
 
     valid = bool(cur_o.valide and new_o.valide)
 
     err_type = None
     err_detail = None
-    print("DEBUG VALID =", valid, "cur_o =", cur_o, "new_o =", new_o)
+    if DEBUG:
+        print("DEBUG VALID =", valid, "cur_o =", cur_o, "new_o =", new_o)
     if not valid:
         status = build_status(
             False, "ERROR", None,
@@ -258,7 +259,8 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
         }
 
     # Résolution CURRENT
-    print("DEBUG BEFORE CURRENT LOOP", net["Current"])
+    if DEBUG:
+        print("DEBUG BEFORE CURRENT LOOP", net["Current"])
     for role in ("Primaire", "DR"):
         net["Current"][role], e, d = compute_net_side(
             net["Current"][role],
