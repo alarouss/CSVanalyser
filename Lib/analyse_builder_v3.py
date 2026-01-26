@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-#Lib/analyse_builder_v3.py
+# Lib/analyse_builder_v3.py
 
 import time
 from Lib.jdbc_flow_v2 import interpret, compare, resolve_cname, resolve_scan
 from Lib.io_common import ustr
+from AnalyseV3 import show_progress   # IMPORT MÉCANIQUE (pas de réécriture)
 
 RAW_COLUMNS = [
     "Statut Global", "Lot", "Application", "Databases", "DR O/N",
@@ -13,8 +14,8 @@ RAW_COLUMNS = [
     "New connection string avec DR",
     "Cnames", "Services", "Acces", "Cnames DR"
 ]
+
 # ------------------------------------------------
-# IMPORTANT: le CSV chez toi est souvent latin1/cp1252 => sinon "Terminé" devient "Termin"
 def ustr_csv(v):
     if v is None:
         return u""
@@ -39,6 +40,7 @@ def normalize_row(row):
     for k, v in row.items():
         out[normalize_key(k)] = ustr_csv(v)
     return out
+
 # ------------------------------------------------
 def _raw_source(row):
     raw = {}
@@ -51,30 +53,20 @@ def _raw_debug(row):
     for k, v in row.items():
         dbg[ustr_csv(k)] = ustr_csv(v)
     return dbg
+
 def build_raw_source(row):
-    """
-    Source brute contractuelle (colonnes métier)
-    → utilisée pour comparaison dirty + affichage ReportV3
-    """
     raw = {}
     for c in RAW_COLUMNS:
-        v = row.get(c, u"")
-        if v is None:
-            v = u""
+        v = row.get(c, u"") or u""
         raw[c] = ustr(v).strip()
     return raw
 
-
-# ------------------------------------------------
 def build_raw_debug(row):
-    """
-    Source CSV complète (DEBUG)
-    → ne sert qu’au diagnostic
-    """
     dbg = {}
     for k, v in row.items():
         dbg[ustr(k)] = ustr(v)
     return dbg
+
 # ------------------------------------------------
 def build_status(valid, scan, scan_dr, dirty, dirty_reason,
                  err_type, err_detail, mode,
@@ -97,11 +89,9 @@ def build_status(valid, scan, scan_dr, dirty, dirty_reason,
         st["OEMErrorDetail"] = oem_err_detail
 
     return st
-  def compute_net_side(block, step_prefix, pos, total):
-    """
-    Applique la résolution CNAME / SCAN
-    sur block = {"host":..., "cname":..., "scan":...}
-    """
+
+# ------------------------------------------------
+def compute_net_side(block, step_prefix, pos, total):
     host = block.get("host")
     if not host:
         return block, None, None
@@ -109,7 +99,6 @@ def build_status(valid, scan, scan_dr, dirty, dirty_reason,
     if host in ("DR", "Primaire"):
         raise Exception("INVARIANT VIOLATION: host=%r" % host)
 
-    # ---------- CNAME ----------
     show_progress(pos, total, "%s_CNAME" % step_prefix)
     cname, e1, d1 = resolve_cname(host)
     if e1:
@@ -119,7 +108,6 @@ def build_status(valid, scan, scan_dr, dirty, dirty_reason,
 
     block["cname"] = cname
 
-    # ---------- SCAN ----------
     show_progress(pos, total, "%s_SCAN" % step_prefix)
     scan, e2, d2 = resolve_scan(cname)
     if e2:
@@ -129,16 +117,15 @@ def build_status(valid, scan, scan_dr, dirty, dirty_reason,
 
     block["scan"] = scan
     return block, None, None
+
 # ------------------------------------------------
 def compute_block_status(block, had_error):
-    """
-    Déduit le statut logique d’un bloc réseau
-    """
     if not block.get("host"):
         return "N/A"
     if had_error:
         return "ERROR"
     return "OK"
+
 # ------------------------------------------------
 def compute_network_block(host, step, pos, total):
     net = {"host": host, "cname": None, "scan": None}
@@ -152,8 +139,6 @@ def compute_network_block(host, step, pos, total):
 
     scan_input = net["cname"] or host
     show_progress(pos, total, "%s_SCAN" % step)
-    if host in ("DR", "Primaire"):
-        raise Exception("INVARIANT VIOLATION: host=%r" % host)
     scan, e2, d2 = resolve_scan(scan_input)
     if e2:
         net["scan"] = scan
@@ -165,47 +150,16 @@ def compute_network_block(host, step, pos, total):
     return net, None, None
 
 # ------------------------------------------------
-#def fill_net_from_addresses(parsed, net_side):
-    """
-    Remplit net_side {"Primaire":{}, "DR":{}}
-    à partir de JdbcParsed.addresses (dict structuré)
-    """
-
-#    if not parsed or not isinstance(parsed.addresses, dict):
-#        return
-#    for role in ("Primaire", "DR"):
-#        addr = parsed.addresses.get(role)
-#        if not addr:
-#            continue
-#        host = addr.get("host")
-#        if not host:
-#            continue
-#        if role in net_side:
-#            net_side[role]["host"] = host
 def fill_net_from_addresses(o, net_side):
-    """
-    Alimente Primaire / DR à partir de JdbcParsed.addresses
-    Contrat:
-      o.addresses = {
-          "Primaire": {"host": ...},
-          "DR": {"host": ...}
-      }
-    Aucune validation, aucun contrôle métier.
-    """
     if not o or not getattr(o, "addresses", None):
         return
 
     addrs = o.addresses
-
     if isinstance(addrs, dict):
         if "Primaire" in addrs:
             net_side["Primaire"]["host"] = addrs["Primaire"].get("host")
-
         if "DR" in addrs:
             net_side["DR"]["host"] = addrs["DR"].get("host")
-
-# ------------------------------------------------
-
 
 # ------------------------------------------------
 
