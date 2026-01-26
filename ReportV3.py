@@ -222,7 +222,10 @@ def show_object(o, debug=False):
         ("OEM CONN", "OEM", True),
     ]:
         print_section(label)
-        block = net.get(key,{})
+        if isinstance(key, tuple):
+            block = net.get(key[0], {}).get(key[1], {})
+        else:
+            block = net.get(key, {})
         rows = [
             ("Host", block.get("host")),
             ("CNAME", block.get("cname")),
