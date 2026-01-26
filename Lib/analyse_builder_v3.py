@@ -3,6 +3,7 @@
 # Lib/analyse_builder_v3.py
 
 import time
+import sys
 from Lib.jdbc_flow_v2 import interpret, compare, resolve_cname, resolve_scan
 from Lib.io_common import ustr
 
