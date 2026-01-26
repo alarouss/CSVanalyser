@@ -33,24 +33,6 @@ Options:
 """
 
 # ------------------------------------------------
-def show_progress(pos, total, step):
-    try:
-        percent = int((float(pos) / float(total)) * 100) if total else 100
-    except:
-        percent = 100
-
-    percent = max(0, min(100, percent))
-    bar = "." * int(percent / 2)
-
-    label = "Pos:%3d/%-3d | %-14s" % (pos, total, (step or "")[:14])
-    label = "[%-30s]" % label
-
-    sys.stdout.write(
-        "\rProgress: %s %-50s %3d%%\033[K" % (label, bar, percent)
-    )
-    sys.stdout.flush()
-
-# ------------------------------------------------
 def parse_target_ids(option, maxid):
     opt = (option or "").strip()
 
