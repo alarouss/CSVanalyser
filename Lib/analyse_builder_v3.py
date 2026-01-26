@@ -188,7 +188,26 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
 
     cur_o, ecur, dcur = interpret(cur)
     new_o, enew, dnew = interpret(new)
-
+    # === INJECTION DR (OPTION 1) ===
+    if getattr(new_o, "addresses", None):
+        dr_addr = new_o.addresses.get("DR")
+        if dr_addr and not dr_addr.get("host"):
+    
+            # priorité 1 : JDBC DR explicite
+            dr_jdbc = raw.get("New connection string avec DR") or raw.get("New connection string  avec DR")
+            if dr_jdbc:
+                dr_o, e_dr, d_dr = interpret(dr_jdbc)
+                if dr_o and getattr(dr_o, "addresses", None):
+                    dr_host = dr_o.addresses.get("Primaire", {}).get("host")
+                    if dr_host:
+                        new_o.addresses["DR"]["host"] = dr_host
+    
+            # priorité 2 : CNAME DR
+            if not new_o.addresses["DR"].get("host"):
+                cname_dr = raw.get("Cnames DR")
+                if cname_dr:
+                    new_o.addresses["DR"]["host"] = cname_dr
+    # === FIN INJECTION DR ===
     net = {
         "Current": {
             "Primaire": {"host": None, "cname": None, "scan": None},
