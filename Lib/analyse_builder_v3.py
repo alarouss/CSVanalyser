@@ -7,6 +7,7 @@ import sys
 from Lib.jdbc_flow_v2 import interpret, compare, resolve_cname, resolve_scan
 from Lib.io_common import ustr
 from Lib.oem_flow import oem_get_host_and_port
+from Lib.compare_primary import compare_primary
 
 RAW_COLUMNS = [
     "Statut Global", "Lot", "Application", "Databases", "DR O/N",
@@ -312,28 +313,43 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
         if e and not err_type:
             err_type, err_detail = e, d
 
-    # Comparaison référence = Current / Primaire
-    if err_type:
-        scan_status = "ERROR"
-    else:
-        eq = compare(
-            net["Current"]["Primaire"]["scan"],
-            net["New"]["Primaire"]["scan"]
-        )
-        scan_status = "VALIDE" if eq else "DIFFERENT"
-        if not eq:
-            err_type = "SCAN_DIFFERENT"
-            err_detail = "Current and New SCAN differ"
+    # =====================================================
+# Comparaison Current / New — Primaire UNIQUEMENT
+# Règle : host → cname → scan
+# =====================================================
 
-    scan_dr_status = None
-    if net["New"]["DR"]["host"]:
-        eqdr = compare(
-            net["Current"]["Primaire"]["scan"],
-            net["New"]["DR"]["scan"]
-        )
-        scan_dr_status = "VALIDE" if eqdr else "DIFFERENT"
-    else:
-        scan_dr_status = "N/A"
+scan_status = "OK"
+err_type = None
+err_detail = None
+
+cur_p = net.get("Current", {}).get("Primaire", {})
+new_p = net.get("New", {}).get("Primaire", {})
+
+# 1) HOST
+if cur_p.get("host") and new_p.get("host"):
+    if cur_p["host"] != new_p["host"]:
+
+        # 2) CNAME
+        if cur_p.get("cname") and new_p.get("cname"):
+            if cur_p["cname"] != new_p["cname"]:
+
+                # 3) SCAN
+                if cur_p.get("scan") and new_p.get("scan"):
+                    if cur_p["scan"] != new_p["scan"]:
+                        scan_status = "DIFFERENT"
+                else:
+                    scan_status = "N/A"
+        else:
+            scan_status = "N/A"
+else:
+    scan_status = "N/A"
+
+# AUCUNE ERREUR ICI : situation normale
+err_type = None
+err_detail = None
+
+scan_dr_status = "N/A"   # DR volontairement ignoré
+
 
     status = build_status(
         True,
