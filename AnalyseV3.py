@@ -181,13 +181,21 @@ if __name__ == "__main__":
     total = len(ids_to_process)
     pos = 0
 
+    BATCH_SIZE = 10
+
     for oid in ids_to_process:
         pos += 1
         row = rows[oid - 1]
-        objs.append(
-            build_object_v3(row, oid, oem_conn, pos, total, force)
-        )
-
+    
+        obj = build_object_v3(row, oid, oem_conn, pos, total, force)
+        objs.append(obj)
+    
+        # =========================
+        # FLUSH PAR BATCH DE 10
+        # =========================
+        if pos % BATCH_SIZE == 0:
+            store["objects"] = keep + objs
+            save_store(STORE_FILE, store)
     sys.stdout.write("\n")
 
     store["objects"] = keep + objs
