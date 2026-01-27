@@ -314,42 +314,41 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
             err_type, err_detail = e, d
 
     # =====================================================
-# Comparaison Current / New — Primaire UNIQUEMENT
-# Règle : host → cname → scan
-# =====================================================
+    # Comparaison Current / New — Primaire UNIQUEMENT
+    # Règle : host → cname → scan
+    # =====================================================
 
-scan_status = "OK"
-err_type = None
-err_detail = None
+    scan_status = "OK"
+    err_type = None
+    err_detail = None
 
-cur_p = net.get("Current", {}).get("Primaire", {})
-new_p = net.get("New", {}).get("Primaire", {})
+    cur_p = net.get("Current", {}).get("Primaire", {})
+    new_p = net.get("New", {}).get("Primaire", {})
 
-# 1) HOST
-if cur_p.get("host") and new_p.get("host"):
-    if cur_p["host"] != new_p["host"]:
+    # 1) HOST
+    if cur_p.get("host") and new_p.get("host"):
+        if cur_p["host"] != new_p["host"]:
 
-        # 2) CNAME
-        if cur_p.get("cname") and new_p.get("cname"):
-            if cur_p["cname"] != new_p["cname"]:
+            # 2) CNAME
+            if cur_p.get("cname") and new_p.get("cname"):
+                if cur_p["cname"] != new_p["cname"]:
 
-                # 3) SCAN
-                if cur_p.get("scan") and new_p.get("scan"):
-                    if cur_p["scan"] != new_p["scan"]:
-                        scan_status = "DIFFERENT"
-                else:
-                    scan_status = "N/A"
-        else:
-            scan_status = "N/A"
-else:
-    scan_status = "N/A"
+                    # 3) SCAN
+                    if cur_p.get("scan") and new_p.get("scan"):
+                        if cur_p["scan"] != new_p["scan"]:
+                            scan_status = "DIFFERENT"
+                    else:
+                        scan_status = "N/A"
+            else:
+                scan_status = "N/A"
+    else:
+        scan_status = "N/A"
 
-# AUCUNE ERREUR ICI : situation normale
-err_type = None
-err_detail = None
+    # AUCUNE ERREUR ICI : situation normale
+    err_type = None
+    err_detail = None
 
-scan_dr_status = "N/A"   # DR volontairement ignoré
-
+    scan_dr_status = "N/A"   # DR volontairement ignoré
 
     status = build_status(
         True,
