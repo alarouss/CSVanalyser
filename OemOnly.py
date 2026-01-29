@@ -29,10 +29,18 @@ if __name__ == "__main__":
         print(cd)
         sys.exit(1)
 
-    oem_conn = conf.get("OEM_CONN")
-    if not oem_conn:
-        print("OEM_CONN not defined in config")
+    OEM_CONF = conf.get("OEM_CONF_FILE")
+    if not OEM_CONF:
+        print("OEM_CONF_FILE not defined in config")
         sys.exit(1)
+    
+    from AnalyseV3 import read_oem_conn
+    oem_conn = read_oem_conn(OEM_CONF)
+    
+    if not oem_conn:
+        print("OEM connection string not found in OEM_CONF_FILE")
+        sys.exit(1)
+
 
     result = {
         "Database": db_name,
