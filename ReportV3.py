@@ -28,11 +28,15 @@ def print_help():
 
 Usage:
  python ReportV3.py -summary
+ python ReportV3.py -summary -new-cname-mismatch
  python ReportV3.py -summary ?
  python ReportV3.py -summary Application=?
  python ReportV3.py -summary Application=APP_1 Lot=5
  python ReportV3.py id=N [-debug]
  python ReportV3.py -help
+
+Options:
+ -new-cname-mismatch   (filtre: New/Primaire cname != scan)
 """.encode("utf-8")
 
 # ================= CONFIG LOAD =================
@@ -117,7 +121,7 @@ def compute_block_status(block, applicable=True):
         return color_na(), "N/A"
     if cname is None and scan is None:
         return color_na(), "N/A"
-        
+
     if cname is None:
         return color_err("CNAME_ERROR"), "CNAME_ERROR"
 
@@ -137,6 +141,39 @@ FILTER_FIELDS = {
                         o.get("RawSource", {}).get("Statut Global"))),
     "Dirty":       lambda o: "YES" if o.get("Status", {}).get("Dirty") else "NO",
 }
+
+# ============================================================
+# FILTRE AJOUTÉ : New/Primaire cname != scan (sans régression)
+# ============================================================
+def new_cname_mismatch(o):
+    """
+    True si New JDBC Primaire a un cname différent du scan.
+    (Comparaison insensible à la casse/espaces)
+    """
+    net = o.get("Network", {})
+    new_p = net.get("New", {}).get("Primaire", {})
+
+    cname = new_p.get("cname")
+    scan  = new_p.get("scan")
+
+    if not cname or not scan:
+        return False
+
+    try:
+        c = ustr(cname).strip().lower()
+        s = ustr(scan).strip().lower()
+    except:
+        try:
+            c = str(cname).strip().lower()
+            s = str(scan).strip().lower()
+        except:
+            return False
+
+    if not c or not s:
+        return False
+
+    return c != s
+
 def pager_wait():
     sys.stdout.write("\n-- More -- (SPACE to continue, q to quit)")
     sys.stdout.flush()
@@ -312,6 +349,7 @@ if __name__ == "__main__":
                 print "\nFiltres disponibles:"
                 for k in sorted(FILTER_FIELDS.keys()):
                     print " ",k
+                print "  -new-cname-mismatch"
                 sys.exit(0)
             if "=" in a:
                 k,v = a.split("=",1)
@@ -324,6 +362,10 @@ if __name__ == "__main__":
 
         for k,v in filters.items():
             objs = [o for o in objs if FILTER_FIELDS[k](o) == v]
+
+        # ✅ filtre ajouté (sans impact sur le reste)
+        if "-new-cname-mismatch" in args:
+            objs = [o for o in objs if new_cname_mismatch(o)]
 
         print_summary(objs)
         sys.exit(0)
