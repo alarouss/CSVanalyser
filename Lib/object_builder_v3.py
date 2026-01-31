@@ -12,7 +12,7 @@ from Lib.analyse_builder_v3 import (
 from Lib.jdbc_flow_v2 import interpret
 from Lib.oem_flow import oem_get_host_and_port
 from Lib.host_coherence import check_host_coherence
-from Lib.analyse_builder_v3 import DEBUG
+import Lib.analyse_builder_v3 as ABV3
 
 # ------------------------------------------------
 def build_object_v3(row, obj_id, oem_conn, pos, total, force):
@@ -91,7 +91,7 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
 
     fill_net_from_addresses(cur_o, net["Current"])
     fill_net_from_addresses(new_o, net["New"])
-    if DEBUG:
+    if ABV3.DEBUG:
         # ===== DEBUG TEMPORAIRE (ETAPE 1) =====
         print("DEBUG ADDRESSES NEW =", getattr(new_o, "addresses", None))
         print("DEBUG NET NEW =", net["New"])
@@ -101,7 +101,7 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
 
     err_type = None
     err_detail = None
-    if DEBUG:
+    if ABV3.DEBUG:
         print("DEBUG VALID =", valid, "cur_o =", cur_o, "new_o =", new_o)
     if not valid:
         status = build_status(
@@ -121,7 +121,7 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
         }
 
     # Résolution CURRENT
-    if DEBUG:
+    if ABV3.DEBUG:
         print("DEBUG BEFORE CURRENT LOOP", net["Current"])
     for role in ("Primaire", "DR"):
         net["Current"][role], e, d = compute_net_side(
