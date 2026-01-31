@@ -12,7 +12,7 @@ from Lib.store import load_store, save_store, build_index
 from Lib.oem_flow import oem_get_host_and_port
 
 # IMPORTS APRÈS DÉCOUPAGE (OBLIGATOIRES)
-from Lib.analyse_builder_v3 import build_object_v3, normalize_row, set_debug
+from Lib.object_builder_v3 import build_object_v3
 DEBUG = False
 # ------------------------------------------------
 def print_help():
