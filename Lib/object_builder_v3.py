@@ -12,6 +12,7 @@ from Lib.analyse_builder_v3 import (
 from Lib.jdbc_flow_v2 import interpret
 from Lib.oem_flow import oem_get_host_and_port
 from Lib.host_coherence import check_host_coherence
+from Lib.analyse_builder_v3 import DEBUG
 
 # ------------------------------------------------
 def build_object_v3(row, obj_id, oem_conn, pos, total, force):
