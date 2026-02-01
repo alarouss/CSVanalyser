@@ -40,16 +40,23 @@ Options:
 """.encode("utf-8")
 
 # =================
-def coherence_label(o):
+def coherence_value(o):
     coh = o.get("Status", {}).get("Coherence", {})
     v = coh.get("GlobalOK")
-
     if v is True:
-        return GREEN + u"✓ OK" + RESET
+        return "OK"
     if v is False:
+        return "KO"
+    return "N/A"
+
+def coherence_label(o):
+    v = coherence_value(o)
+
+    if v == "OK":
+        return GREEN + u"✓ OK" + RESET
+    if v == "KO":
         return RED + u"✗ KO" + RESET
     return YELLOW + u"⚠ N/A" + RESET
-
 # ================= CONFIG LOAD =================
 
 def load_main_conf():
