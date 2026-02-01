@@ -43,11 +43,13 @@ Options:
 def coherence_label(o):
     coh = o.get("Status", {}).get("Coherence", {})
     v = coh.get("GlobalOK")
+
     if v is True:
-        return "OK"
+        return GREEN + u"✓ OK" + RESET
     if v is False:
-        return "KO"
-    return "N/A"
+        return RED + u"✗ KO" + RESET
+    return YELLOW + u"⚠ N/A" + RESET
+
 # ================= CONFIG LOAD =================
 
 def load_main_conf():
