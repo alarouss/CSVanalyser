@@ -333,8 +333,8 @@ def show_object(o, debug=False):
     print_section("COHERENCE HOSTNAME")
     print_table([
         ("Global", coh_str),
-        ("Primary OK", coh.get("PrimaryOK")),
-        ("DR OK", coh.get("DROK")),
+        ("Primary", coh.get("PrimaryMessage")),
+        ("DR", coh.get("DRMessage")),
         ("Rule", coh.get("Rule")),
     ])
 
