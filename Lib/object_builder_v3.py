@@ -206,7 +206,7 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
         "FORCE_UPDATE" if force else "AUTO"
     )
 
-status["Coherence"] = coherence
+    status["Coherence"] = coherence
     return {
         "id": obj_id,
         "OEM": net["OEM"],
