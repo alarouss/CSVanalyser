@@ -13,6 +13,7 @@ from Lib.jdbc_flow_v2 import interpret
 from Lib.oem_flow import oem_get_host_and_port
 from Lib.host_coherence import check_host_coherence
 import Lib.analyse_builder_v3 as ABV3
+from Lib.host_coherence import check_host_coherence
 
 # ------------------------------------------------
 def build_object_v3(row, obj_id, oem_conn, pos, total, force):
@@ -179,6 +180,10 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
 
     scan_dr_status = "N/A"   # DR volontairement ignoré
 
+    coherence = check_host_coherence(
+        raw.get("Application"),
+        net.get("New", {})
+    )
     status = build_status(
         True,
         scan_status,
@@ -190,6 +195,18 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
         "FORCE_UPDATE" if force else "AUTO"
     )
 
+    status = build_status(
+        True,
+        scan_status,
+        scan_dr_status,
+        False,
+        None,
+        err_type,
+        err_detail,
+        "FORCE_UPDATE" if force else "AUTO"
+    )
+
+status["Coherence"] = coherence
     return {
         "id": obj_id,
         "OEM": net["OEM"],
