@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # Lib/host_coherence.py
 #
-# Controle de coherence metier des hostnames
-# Regle STRICTE :
-#   Primaire = Application + P0DB
-#   DR       = Application + P0DR
+# Controle de coherence metier des hostnames (FQDN)
+# Regle :
+#   Primaire = Application + P0DB + suffixe DNS observe
+#   DR       = Application + P0DR + suffixe DNS observe
 # Comparaison insensible a la casse
 #
 
@@ -20,15 +20,29 @@ def _norm_host(s):
         return None
 
 
+def _extract_dns_suffix(fqdn):
+    """
+    Extrait le suffixe DNS a partir d'un FQDN.
+    Exemple :
+      accueil-clientp0db.groupe.generali.fr -> .groupe.generali.fr
+    """
+    if not fqdn:
+        return ""
+    fqdn = _norm_host(fqdn)
+    if "." not in fqdn:
+        return ""
+    return fqdn[fqdn.find("."):]  # garde le point
+
+
 def check_host_coherence(application, new_network_block):
     """
-    Verifie la coherence des hostnames dans net['New']
+    Verifie la coherence FQDN des hostnames dans net['New']
     """
 
     app_n = _norm_host(application)
 
     coh = {
-        "Rule": "Application + P0DB / P0DR (case-insensitive)",
+        "Rule": "Application + P0DB / P0DR + DNS suffix (FQDN)",
 
         "PrimaryExpected": None,
         "PrimaryActual": None,
@@ -46,15 +60,17 @@ def check_host_coherence(application, new_network_block):
     # ======================
     # PRIMAIRE
     # ======================
-    exp_p = _norm_host(app_n + "p0db") if app_n else None
     act_p = _norm_host(
         new_network_block.get("Primaire", {}).get("host")
     )
 
+    dns_suffix_p = _extract_dns_suffix(act_p) if act_p else ""
+    exp_p = _norm_host(app_n + "p0db" + dns_suffix_p) if app_n else None
+
     coh["PrimaryExpected"] = exp_p
     coh["PrimaryActual"] = act_p
 
-    if exp_p is not None and act_p is not None:
+    if exp_p and act_p:
         if act_p == exp_p:
             coh["PrimaryOK"] = True
             coh["PrimaryMessage"] = "OK"
@@ -70,15 +86,17 @@ def check_host_coherence(application, new_network_block):
     # ======================
     # DR
     # ======================
-    exp_d = _norm_host(app_n + "p0dr") if app_n else None
     act_d = _norm_host(
         new_network_block.get("DR", {}).get("host")
     )
 
+    dns_suffix_d = _extract_dns_suffix(act_d) if act_d else ""
+    exp_d = _norm_host(app_n + "p0dr" + dns_suffix_d) if app_n else None
+
     coh["DRExpected"] = exp_d
     coh["DRActual"] = act_d
 
-    if exp_d is not None and act_d is not None:
+    if exp_d and act_d:
         if act_d == exp_d:
             coh["DROK"] = True
             coh["DRMessage"] = "OK"
