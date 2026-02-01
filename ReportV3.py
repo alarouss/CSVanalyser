@@ -39,6 +39,15 @@ Options:
  -new-cname-mismatch   (filtre: New/Primaire cname != scan)
 """.encode("utf-8")
 
+# =================
+def coherence_label(o):
+    coh = o.get("Status", {}).get("Coherence", {})
+    v = coh.get("GlobalOK")
+    if v is True:
+        return "OK"
+    if v is False:
+        return "KO"
+    return "N/A"
 # ================= CONFIG LOAD =================
 
 def load_main_conf():
@@ -139,6 +148,7 @@ FILTER_FIELDS = {
     "DR":          lambda o: ustr(o.get("RawSource", {}).get("DR O/N", "")),
     "Statut":      lambda o: strip_ansi(format_global_status(
                         o.get("RawSource", {}).get("Statut Global"))),
+    "COH": coherence_label,
     "Dirty":       lambda o: "YES" if o.get("Status", {}).get("Dirty") else "NO",
 }
 
@@ -205,6 +215,7 @@ def print_summary(objs):
         ("Current STR",14),
         ("New STR",14),
         ("New DR",14),
+        ("COH",5),
         ("Dirty",6),
     ]
 
@@ -250,6 +261,7 @@ def print_summary(objs):
             cur_s,
             new_s,
             dr_s,
+            coherence_label(o),
             color_dirty(st.get("Dirty")),
         ]
 
