@@ -374,7 +374,6 @@ def show_object(o, debug=False):
         ]
     print_table(rows)
 
-    #------------------
     # ===============================
     # COHERENCE HOSTNAME (METIER)
     # ===============================
@@ -394,6 +393,30 @@ def show_object(o, debug=False):
         ("Primary", coh.get("PrimaryMessage")),
         ("DR", coh.get("DRMessage")),
         ("Rule", coh.get("Rule")),
+    ])
+
+    # ===============================
+    # SCAN PATH VALIDATION (METIER)
+    # ===============================
+    scanpath = st.get("ScanPath", {})
+    sp_p = scanpath.get("Primary", {})
+
+    print_section("SCAN PATH VALIDATION")
+    print_table([
+        ("Primary Status", format_status_flag(sp_p.get("Status"))),
+        ("Primary Message", sp_p.get("Message")),
+    ])
+
+    # ===============================
+    # SERVICE VALIDATION (METIER)
+    # ===============================
+    service = st.get("ServiceCheck", {})
+    sv_p = service.get("Primary", {})
+
+    print_section("SERVICE VALIDATION")
+    print_table([
+        ("Primary Status", format_status_flag(sv_p.get("Status"))),
+        ("Primary Message", sv_p.get("Message")),
     ])
 
     if debug:
