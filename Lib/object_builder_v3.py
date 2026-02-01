@@ -212,7 +212,7 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
     # =====================================================
     
     scan_path = compute_scan_path(net, raw)
-    service_check = compute_service_check(net, raw, scan_path)
+    service_check = compute_service_check(net, raw)
     
     status["ScanPath"] = scan_path
     status["ServiceCheck"] = service_check
