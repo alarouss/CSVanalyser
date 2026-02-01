@@ -402,10 +402,25 @@ def show_object(o, debug=False):
     sp_p = scanpath.get("Primary", {})
 
     print_section("SCAN PATH VALIDATION")
-    print_table([
-        ("Primary Status", format_status_flag(sp_p.get("Status"))),
-        ("Primary Message", sp_p.get("Message")),
-    ])
+
+    sp = st.get("ScanPath", {})
+    prim = sp.get("Primary", {})
+    
+    rows = [
+        ("Primary Status",
+         GREEN + u"✓ OK" + RESET if prim.get("Status") == "OK"
+         else RED + u"✗ KO" + RESET if prim.get("Status") == "KO"
+         else YELLOW + u"⚠ N/A" + RESET),
+    
+        ("Primary Message", prim.get("Message")),
+    
+        ("Resolved SCAN", prim.get("ResolvedSCAN")),
+        ("Expected SCAN", prim.get("ExpectedSCAN")),
+        ("Expected Source", prim.get("ExpectedSource")),
+    ]
+    
+    print_table(rows)
+
 
     # ===============================
     # SERVICE VALIDATION (METIER)
