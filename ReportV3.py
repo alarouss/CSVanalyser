@@ -416,7 +416,7 @@ def show_object(o, debug=False):
     
         ("Resolved SCAN", prim.get("ResolvedSCAN")),
         ("Expected SCAN", prim.get("ExpectedSCAN")),
-        ("Expected Source", prim.get("ExpectedSource")),
+        ("Expected Source", "ORACLE_CLUSTER (srvctl)"),
     ]
     
     print_table(rows)
