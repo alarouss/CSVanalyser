@@ -14,6 +14,7 @@ from Lib.oem_flow import oem_get_host_and_port
 from Lib.host_coherence import check_host_coherence
 import Lib.analyse_builder_v3 as ABV3
 from Lib.host_coherence import check_host_coherence
+from Lib.scan_service_checks import compute_scan_path, compute_service_check
 
 # ------------------------------------------------
 def build_object_v3(row, obj_id, oem_conn, pos, total, force):
@@ -206,6 +207,15 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
         err_detail,
         "FORCE_UPDATE" if force else "AUTO"
     )
+    # =====================================================
+    # ScanPath -> ServiceCheck (VALIDATION ONLY)
+    # =====================================================
+    
+    scan_path = compute_scan_path(net, raw)
+    service_check = compute_service_check(net, raw, scan_path)
+    
+    status["ScanPath"] = scan_path
+    status["ServiceCheck"] = service_check
 
     status["Coherence"] = coherence
     return {
