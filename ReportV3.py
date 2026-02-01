@@ -404,7 +404,11 @@ if __name__ == "__main__":
                 filters[k] = v
 
         for k,v in filters.items():
-            objs = [o for o in objs if FILTER_FIELDS[k](o) == v]
+            objs = [
+                o for o in objs
+                if ustr(FILTER_FIELDS[k](o)).strip().lower()
+                   == ustr(v).strip().lower()
+            ]
 
         # ✅ filtre ajouté (sans impact sur le reste)
         if "-new-cname-mismatch" in args:
