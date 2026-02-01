@@ -157,7 +157,7 @@ FILTER_FIELDS = {
     "DR":          lambda o: ustr(o.get("RawSource", {}).get("DR O/N", "")),
     "Statut":      lambda o: strip_ansi(format_global_status(
                         o.get("RawSource", {}).get("Statut Global"))),
-    "COH": coherence_label,
+    "COH":         lambda o: coherence_value(o),
     "Dirty":       lambda o: "YES" if o.get("Status", {}).get("Dirty") else "NO",
 }
 
