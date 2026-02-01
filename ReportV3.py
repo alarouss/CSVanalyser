@@ -40,6 +40,13 @@ Options:
 """.encode("utf-8")
 
 # =================
+def format_status_flag(v):
+    if v == "OK":
+        return GREEN + u"✓ OK" + RESET
+    if v == "KO":
+        return RED + u"✗ KO" + RESET
+    return YELLOW + u"⚠ N/A" + RESET
+    
 def coherence_value(o):
     coh = o.get("Status", {}).get("Coherence", {})
     v = coh.get("GlobalOK")
@@ -160,7 +167,16 @@ FILTER_FIELDS = {
     "COH":         lambda o: coherence_value(o),
     "Dirty":       lambda o: "YES" if o.get("Status", {}).get("Dirty") else "NO",
 }
-
+FILTER_FIELDS.update({
+    "SCAN": lambda o: o.get("Status", {})
+                          .get("ScanPath", {})
+                          .get("Primary", {})
+                          .get("Status", "N/A"),
+    "SERVICE": lambda o: o.get("Status", {})
+                             .get("ServiceCheck", {})
+                             .get("Primary", {})
+                             .get("Status", "N/A"),
+})
 # ============================================================
 # FILTRE AJOUTÉ : New/Primaire cname != scan (sans régression)
 # ============================================================
@@ -225,6 +241,8 @@ def print_summary(objs):
         ("New STR",14),
         ("New DR",14),
         ("COH",5),
+        ("ScanPath",10),
+        ("Service",10),
         ("Dirty",6),
     ]
 
@@ -250,6 +268,23 @@ def print_summary(objs):
         st = o.get("Status", {})
         net = o.get("Network", {})
 
+        # --- ScanPath / Service status (Primary only) ---
+        scanpath_p = st.get("ScanPath", {}).get("Primary", {}).get("Status")
+        service_p  = st.get("ServiceCheck", {}).get("Primary", {}).get("Status")
+        
+        scanpath_disp = format_status_flag(scanpath_p)
+        service_disp  = format_status_flag(service_p)
+        
+        # --- Coherence status (déjà existant chez toi) ---
+        coh_p = st.get("Coherence", {}).get("GlobalOK")
+        if coh_p is True:
+            coh_disp = GREEN + u"✓ OK" + RESET
+        elif coh_p is False:
+            coh_disp = RED + u"✗ KO" + RESET
+        else:
+            coh_disp = YELLOW + u"⚠ N/A" + RESET
+
+
         cur_s, _ = compute_block_status(net.get("Current"))
         new_s, _ = compute_block_status(net.get("New"))
         dr_s,  _ = compute_block_status(
@@ -271,6 +306,8 @@ def print_summary(objs):
             new_s,
             dr_s,
             coherence_label(o),
+            scanpath_disp,
+            service_disp,
             color_dirty(st.get("Dirty")),
         ]
 
