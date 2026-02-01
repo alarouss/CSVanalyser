@@ -255,3 +255,61 @@ def compute_service_check(network, rawsource):
     out["DR"] = dr_res
 
     return out
+#---------------------------------
+# -*- coding: utf-8 -*-
+
+def compute_service_declaration(new_jdbc_obj):
+    """
+    S2 — Service Access Mode Declaration (non bloquant)
+
+    Analyse la JDBC New et détermine le mode d'accès :
+      - SERVICE_NAME
+      - SID
+      - UNKNOWN
+
+    Aucun accès Oracle, aucune validation bloquante.
+    Compatible Python 2.6.
+    """
+
+    out = {
+        "Status": "N/A",
+        "Mode": None,
+        "Actual": None,
+        "Message": None,
+        "Rule": "Detect SERVICE_NAME or SID declared in JDBC string; SID is allowed but discouraged."
+    }
+
+    if not new_jdbc_obj:
+        out["Message"] = "No JDBC object available."
+        return out
+
+    # SERVICE_NAME explicite
+    svc = getattr(new_jdbc_obj, "service_name", None)
+    if svc:
+        out["Status"] = "OK"
+        out["Mode"] = "SERVICE"
+        out["Actual"] = svc
+        out["Message"] = "SERVICE_NAME declared in JDBC string."
+        return out
+
+    # SID explicite
+    sid = getattr(new_jdbc_obj, "sid", None)
+    if sid:
+        out["Status"] = "WARN"
+        out["Mode"] = "SID"
+        out["Actual"] = sid
+        out["Message"] = (
+            "SID-based JDBC detected; service resolution will be required."
+        )
+        return out
+
+    # Aucun des deux
+    out["Status"] = "WARN"
+    out["Mode"] = "UNKNOWN"
+    out["Actual"] = None
+    out["Message"] = (
+        "Neither SERVICE_NAME nor SID explicitly declared in JDBC string."
+    )
+
+    return out
+#---------------------------------------------------------------
