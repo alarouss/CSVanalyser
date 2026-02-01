@@ -63,14 +63,13 @@ def compute_scan_path(network, rawsource):
     Authority: Network.New (current choice).
     Uses OEM scan as reference if available.
     Produces:
-      Status["ScanPath"] = { Rule, Primary:{...}, DR:{Applicable,...} }
+      Status["ScanPath"] = { Rule, Primary:{...}, DR:{...} }
     """
     out = {"Rule": RULE_SCANPATH}
 
     target_db = _u(rawsource.get("Databases", ""))
 
     def eval_side(side, applicable):
-        # side: "Primaire" or "DR"
         if not applicable:
             return {
                 "Applicable": False,
@@ -78,7 +77,9 @@ def compute_scan_path(network, rawsource):
                 "Message": "Host information is missing or not applicable.",
                 "Host": None,
                 "CNAME": None,
-                "SCAN": None,
+                "ResolvedSCAN": None,
+                "ExpectedSCAN": None,
+                "ExpectedSource": None,
                 "TargetDatabase": target_db
             }
 
@@ -87,51 +88,59 @@ def compute_scan_path(network, rawsource):
         cname = nb.get("cname")
         scan = nb.get("scan")
 
-        # 1) Host missing -> N/A
+        # 1) Host missing
         if not host:
             return {
                 "Status": "N/A",
                 "Message": "Host information is missing or not applicable.",
                 "Host": host,
                 "CNAME": cname,
-                "SCAN": scan,
+                "ResolvedSCAN": scan,
+                "ExpectedSCAN": None,
+                "ExpectedSource": None,
                 "TargetDatabase": target_db
             }
 
-        # 2) CNAME missing -> KO
+        # 2) CNAME missing
         if not cname:
             return {
                 "Status": "KO",
                 "Message": "CNAME could not be resolved from host.",
                 "Host": host,
                 "CNAME": cname,
-                "SCAN": scan,
+                "ResolvedSCAN": scan,
+                "ExpectedSCAN": None,
+                "ExpectedSource": None,
                 "TargetDatabase": target_db
             }
 
-        # 3) SCAN missing -> KO
+        # 3) SCAN missing
         if not scan:
             return {
                 "Status": "KO",
                 "Message": "SCAN could not be resolved from CNAME.",
                 "Host": host,
                 "CNAME": cname,
-                "SCAN": scan,
+                "ResolvedSCAN": None,
+                "ExpectedSCAN": None,
+                "ExpectedSource": None,
                 "TargetDatabase": target_db
             }
 
-        # 4) Belongs-to-target-db check (authoritative)
-        # If OEM scan exists, it is the reference for target database / cluster
+        # 4) Compare with expected SCAN (OEM reference)
         ob = _get_oem_block(network, side)
-        oem_scan = ob.get("scan")
+        expected_scan = ob.get("scan")
+        expected_source = "OEM" if expected_scan else None
 
-        if oem_scan and _norm(oem_scan) != _norm(scan):
+        if expected_scan and _norm(expected_scan) != _norm(scan):
             return {
                 "Status": "KO",
-                "Message": "Resolved path does not lead to the SCAN of the target database.",
+                "Message": "Resolved SCAN does not match expected SCAN for target database.",
                 "Host": host,
                 "CNAME": cname,
-                "SCAN": scan,
+                "ResolvedSCAN": scan,
+                "ExpectedSCAN": expected_scan,
+                "ExpectedSource": expected_source,
                 "TargetDatabase": target_db
             }
 
@@ -141,14 +150,16 @@ def compute_scan_path(network, rawsource):
             "Message": "Host resolves via DNS and Oracle to the SCAN of the target database.",
             "Host": host,
             "CNAME": cname,
-            "SCAN": scan,
+            "ResolvedSCAN": scan,
+            "ExpectedSCAN": expected_scan,
+            "ExpectedSource": expected_source,
             "TargetDatabase": target_db
         }
 
-    # Primary always applicable
+    # Primary
     out["Primary"] = eval_side("Primaire", True)
 
-    # DR conditional
+    # DR
     dr_app = _is_dr_applicable(rawsource)
     dr_block = eval_side("DR", dr_app)
     if "Applicable" not in dr_block:
