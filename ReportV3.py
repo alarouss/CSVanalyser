@@ -316,6 +316,28 @@ def show_object(o, debug=False):
         ]
     print_table(rows)
 
+    #------------------
+    # ===============================
+    # COHERENCE HOSTNAME (METIER)
+    # ===============================
+    coh = st.get("Coherence") or {}
+
+    coh_global = coh.get("GlobalOK")
+    if coh_global is True:
+        coh_str = GREEN + u"✓ OK" + RESET
+    elif coh_global is False:
+        coh_str = RED + u"✗ KO" + RESET
+    else:
+        coh_str = YELLOW + u"⚠ N/A" + RESET
+
+    print_section("COHERENCE HOSTNAME")
+    print_table([
+        ("Global", coh_str),
+        ("Primary OK", coh.get("PrimaryOK")),
+        ("DR OK", coh.get("DROK")),
+        ("Rule", coh.get("Rule")),
+    ])
+
     if debug:
         print_section("RAWSOURCE (DEBUG)")
         dbg = o.get("RawSource_DEBUG", {})
