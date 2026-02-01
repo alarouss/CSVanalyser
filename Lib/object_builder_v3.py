@@ -145,6 +145,15 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
         if e and not err_type:
             err_type, err_detail = e, d
 
+    # ======================
+    # COHERENCE METIER (Host + Service naming)
+    # ======================
+    coh = check_host_coherence(
+        raw.get("Application"),
+        net.get("New", {}),
+        raw
+    )
+
     # =====================================================
     # Comparaison Current / New — Primaire UNIQUEMENT
     # Règle : host → cname → scan
