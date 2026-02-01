@@ -120,37 +120,11 @@ def compute_scan_path(network, rawsource):
                 "TargetDatabase": target_db
             }
 
-        # 4) Bypass check: host must be the SCAN (case-insensitive)
-        # 4) Belongs-to-target-db check:
-        # If OEM scan exists, it becomes a strong reference to validate cluster/base intent.
+        # 4) Belongs-to-target-db check (authoritative)
+        # If OEM scan exists, it is the reference for target database / cluster
         ob = _get_oem_block(network, side)
         oem_scan = ob.get("scan")
-        
-        if oem_scan and _norm(oem_scan) != _norm(scan):
-            return {
-                "Status": "KO",
-                "Message": "Resolved path does not lead to the SCAN of the target database.",
-                "Host": host,
-                "CNAME": cname,
-                "SCAN": scan,
-                "TargetDatabase": target_db
-            }
-        
-        # OK
-        return {
-            "Status": "OK",
-            "Message": "Host resolves via DNS and Oracle to the SCAN of the target database.",
-            "Host": host,
-            "CNAME": cname,
-            "SCAN": scan,
-            "TargetDatabase": target_db
-        }
 
-
-        # 5) Belongs-to-target-db check (current implementation):
-        # If OEM scan exists, it becomes a strong reference to validate cluster/base intent.
-        ob = _get_oem_block(network, side)
-        oem_scan = ob.get("scan")
         if oem_scan and _norm(oem_scan) != _norm(scan):
             return {
                 "Status": "KO",
