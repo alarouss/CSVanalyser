@@ -58,7 +58,10 @@ def check_host_coherence(application, new_network_block):
 
     coh["PrimaryExpected"] = exp_p
     coh["PrimaryActual"] = act_p
-    coh["PrimaryOK"] = (exp_p is not None and act_p == exp_p)
+    if exp_p is not None and act_p is not None:
+        coh["PrimaryOK"] = (act_p == exp_p)
+    else:
+        coh["PrimaryOK"] = None
 
     # --------------------
     # DR
