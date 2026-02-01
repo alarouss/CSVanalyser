@@ -33,10 +33,105 @@ def _extract_dns_suffix(fqdn):
         return ""
     return fqdn[fqdn.find("."):]  # garde le point
 
+# ------------------------------------------------------------
+# SERVICE NAMING COHERENCE (METIER)
+# Rule: SRV_<TRIG>_<DATABASE>   (case-insensitive)
+# TRIG is derived from Application (first 3 alnum chars)
+# ------------------------------------------------------------
 
-def check_host_coherence(application, new_network_block):
+def _alnum_only_upper(s):
+    try:
+        u = s
+        if not isinstance(u, unicode):
+            try:
+                u = unicode(s, "utf-8", "ignore")
+            except:
+                try:
+                    u = unicode(str(s), "latin1", "ignore")
+                except:
+                    u = u""
+        u = u.strip().upper()
+    except:
+        u = u""
+
+    out = []
+    for ch in u:
+        # keep A-Z 0-9 only
+        o = ord(ch)
+        if (o >= 48 and o <= 57) or (o >= 65 and o <= 90):
+            out.append(ch)
+    return u"".join(out)
+
+def _derive_trig_from_application(app_name):
+    s = _alnum_only_upper(app_name)
+    if not s:
+        return u""
+    if len(s) >= 3:
+        return s[:3]
+    return s
+
+def compute_service_naming_coherence(rawsource):
+    """
+    Returns a dict inserted into Status.Coherence["ServiceNaming"].
+    """
+    app = rawsource.get("Application") or ""
+    db  = rawsource.get("Databases") or ""
+    srv = rawsource.get("Services") or ""
+
+    trig = _derive_trig_from_application(app)
+
+    # expected: SRV_<TRIG>_<DATABASE>
+    # (we keep DB as-is but normalize to upper for comparison)
+    db_u = _alnum_only_upper(db)
+    expected = u""
+    if trig and db_u:
+        expected = u"SRV_%s_%s" % (trig, db_u)
+
+    srv_u = _alnum_only_upper(srv)  # normalize service provided
+
+    # N/A if no service declared
+    if not srv_u:
+        return {
+            "Rule": "Service name must follow SRV_<TRIG>_<DATABASE> naming convention.",
+            "Status": "KO",
+            "Expected": expected,
+            "Actual": srv,
+            "Message": "No service name declared in JDBC connection string."
+        }
+
+    # If we cannot compute expected (missing app/db), mark N/A
+    if not expected:
+        return {
+            "Rule": "Service name must follow SRV_<TRIG>_<DATABASE> naming convention.",
+            "Status": "N/A",
+            "Expected": expected,
+            "Actual": srv,
+            "Message": "Service naming check not applicable (missing Application or Databases)."
+        }
+
+    if _alnum_only_upper(expected) != srv_u:
+        return {
+            "Rule": "Service name must follow SRV_<TRIG>_<DATABASE> naming convention.",
+            "Status": "KO",
+            "Expected": expected,
+            "Actual": srv,
+            "Message": "Service name does not comply with naming convention SRV_<TRIG>_<DATABASE>."
+        }
+
+    return {
+        "Rule": "Service name must follow SRV_<TRIG>_<DATABASE> naming convention.",
+        "Status": "OK",
+        "Expected": expected,
+        "Actual": srv,
+        "Message": "Service name complies with naming convention SRV_<TRIG>_<DATABASE>."
+    }
+
+#----------------------------------------------------------
+
+def check_host_coherence(application, new_network_block, rawsource):
     """
     Verifie la coherence FQDN des hostnames dans net['New']
+    + coherence metier du nom de service (SRV_<TRIG>_<DATABASE>)
     """
 
     app_n = _norm_host(application)
@@ -53,6 +148,9 @@ def check_host_coherence(application, new_network_block):
         "DRActual": None,
         "DROK": None,
         "DRMessage": None,
+
+        # --- nouveau ---
+        "ServiceNaming": None,
 
         "GlobalOK": None
     }
@@ -77,7 +175,7 @@ def check_host_coherence(application, new_network_block):
         else:
             coh["PrimaryOK"] = False
             coh["PrimaryMessage"] = (
-                "KO (attendu %s, trouve %s)" % (exp_p, act_p)
+                "KO (expected %s, found %s)" % (exp_p, act_p)
             )
     else:
         coh["PrimaryOK"] = None
@@ -103,18 +201,25 @@ def check_host_coherence(application, new_network_block):
         else:
             coh["DROK"] = False
             coh["DRMessage"] = (
-                "KO (attendu %s, trouve %s)" % (exp_d, act_d)
+                "KO (expected %s, found %s)" % (exp_d, act_d)
             )
     else:
         coh["DROK"] = None
         coh["DRMessage"] = "N/A"
 
     # ======================
+    # SERVICE NAMING (METIER)
+    # ======================
+    coh["ServiceNaming"] = compute_service_naming_coherence(rawsource)
+
+    # ======================
     # GLOBAL
     # ======================
-    if coh["PrimaryOK"] is False or coh["DROK"] is False:
+    svc_ok = coh["ServiceNaming"].get("Status") == "OK"
+
+    if coh["PrimaryOK"] is False or coh["DROK"] is False or svc_ok is False:
         coh["GlobalOK"] = False
-    elif coh["PrimaryOK"] is True:
+    elif coh["PrimaryOK"] is True and svc_ok is True:
         coh["GlobalOK"] = True
     else:
         coh["GlobalOK"] = None
