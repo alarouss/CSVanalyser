@@ -1,23 +1,9 @@
 # -*- coding: utf-8 -*-
 # Lib/host_coherence.py
-#
-# Controle de coherence metier des hostnames
-# Regles :
-#   - Primaire : Application + "P0DB"
-#   - DR       : Application + "P0DR"
-# Comparaison insensible a la casse
-#
 
 from Lib.io_common import ustr
 
-
 def _norm_host(s):
-    """
-    Normalise un hostname pour comparaison :
-    - unicode
-    - strip
-    - lower
-    """
     if not s:
         return None
     try:
@@ -28,11 +14,10 @@ def _norm_host(s):
 
 def check_host_coherence(application, new_network_block):
     """
-    Verifie la coherence des hostnames dans net['New']
-
-    :param application: valeur CSV 'Application'
-    :param new_network_block: net['New']
-    :return: dictionnaire de statut de coherence
+    Regle STRICTE (inchangée) :
+      Primaire = Application + P0DB
+      DR       = Application + P0DR
+    Comparaison insensible a la casse.
     """
 
     app_n = _norm_host(application)
@@ -48,9 +33,7 @@ def check_host_coherence(application, new_network_block):
         "GlobalOK": None
     }
 
-    # --------------------
-    # Primaire
-    # --------------------
+    # ===== PRIMAIRE =====
     exp_p = _norm_host(app_n + "p0db") if app_n else None
     act_p = _norm_host(
         new_network_block.get("Primaire", {}).get("host")
@@ -58,33 +41,32 @@ def check_host_coherence(application, new_network_block):
 
     coh["PrimaryExpected"] = exp_p
     coh["PrimaryActual"] = act_p
+
     if exp_p is not None and act_p is not None:
         coh["PrimaryOK"] = (act_p == exp_p)
     else:
         coh["PrimaryOK"] = None
 
-    # --------------------
-    # DR
-    # --------------------
-    act_dr_raw = new_network_block.get("DR", {}).get("host")
-    if act_dr_raw:
-        exp_d = _norm_host(app_n + "p0dr") if app_n else None
-        act_d = _norm_host(act_dr_raw)
+    # ===== DR =====
+    exp_d = _norm_host(app_n + "p0dr") if app_n else None
+    act_d = _norm_host(
+        new_network_block.get("DR", {}).get("host")
+    )
 
-        coh["DRExpected"] = exp_d
-        coh["DRActual"] = act_d
-        coh["DROK"] = (exp_d is not None and act_d == exp_d)
-    else:
-        coh["DROK"] = "N/A"
+    coh["DRExpected"] = exp_d
+    coh["DRActual"] = act_d
 
-    # --------------------
-    # Global
-    # --------------------
-    if coh["PrimaryOK"] is False:
-        coh["GlobalOK"] = False
-    elif coh["DROK"] is False:
-        coh["GlobalOK"] = False
+    if exp_d is not None and act_d is not None:
+        coh["DROK"] = (act_d == exp_d)
     else:
+        coh["DROK"] = None
+
+    # ===== GLOBAL =====
+    if coh["PrimaryOK"] is False or coh["DROK"] is False:
+        coh["GlobalOK"] = False
+    elif coh["PrimaryOK"] is True:
         coh["GlobalOK"] = True
+    else:
+        coh["GlobalOK"] = None
 
     return coh
