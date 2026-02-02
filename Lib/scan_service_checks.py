@@ -4,6 +4,7 @@
 # Python 2.6 compatible
 
 import re
+from Lib.oracle_tools import probe_service_or_sid
 
 RULE_SCANPATH = "Host -> CNAME -> SCAN must resolve to the SCAN of the target database; SCAN bypass is forbidden."
 RULE_SERVICE  = "Service extracted from New JDBC must be valid for the target database reached via SCAN."
@@ -168,6 +169,7 @@ def compute_scan_path(network, rawsource):
 
     return out
 
+#---------------------------------
 def compute_service_check(network, rawsource):
     """
     Authority: New JDBC (service extracted from New connection string).
@@ -180,74 +182,105 @@ def compute_service_check(network, rawsource):
     target_db = _u(rawsource.get("Databases", ""))
     service_csv = _u(rawsource.get("Services", ""))  # optional reference
     new_jdbc = _u(rawsource.get("New connection string", ""))
-    new_jdbc_dr = _u(rawsource.get("New connection string avec DR", "")) or _u(rawsource.get("New connection string  avec DR", ""))
+    new_jdbc_dr = _u(rawsource.get("New connection string avec DR", "")) or \
+                  _u(rawsource.get("New connection string  avec DR", ""))
 
     def scanpath_ok(side):
         sp = rawsource.get("__ScanPath_cache__", {}) or {}
-        # sp["Primary"] corresponds to side Primaire; sp["DR"] corresponds to side DR
         key = "Primary" if side == "Primaire" else "DR"
         s = ((sp.get(key) or {}).get("Status") or "")
         return s == "OK"
 
     def eval_side(side, applicable, jdbc_str):
-        # If ScanPath not OK => skip as N/A
-        if not applicable:
-            return {
-                "Applicable": False,
-                "Status": "N/A",
-                "Message": "Service information is missing or cannot be evaluated.",
-                "TargetDatabase": target_db,
-                "TargetSCAN": (_get_new_block(network, side) or {}).get("scan"),
-                "ServiceFromCSV": service_csv or None,
-                "ServiceFromJDBC": None
-            }
-
-        if not scanpath_ok(side):
-            return {
-                "Status": "N/A",
-                "Message": "Service check skipped because SCAN path is not valid.",
-                "TargetDatabase": target_db,
-                "TargetSCAN": (_get_new_block(network, side) or {}).get("scan"),
-                "ServiceFromCSV": service_csv or None,
-                "ServiceFromJDBC": None
-            }
-
-        svc_jdbc = _extract_service_from_jdbc(jdbc_str)
-        if not svc_jdbc:
-            return {
-                "Status": "N/A",
-                "Message": "Service information is missing or cannot be evaluated.",
-                "TargetDatabase": target_db,
-                "TargetSCAN": (_get_new_block(network, side) or {}).get("scan"),
-                "ServiceFromCSV": service_csv or None,
-                "ServiceFromJDBC": None
-            }
-
-        # Validation (current scope = internal consistency):
-        # If CSV service present, require match (case-insensitive). Otherwise OK (service known but no reference).
-        if service_csv and _norm(service_csv) != _norm(svc_jdbc):
-            return {
-                "Status": "KO",
-                "Message": "Service extracted from New JDBC does not match expected service.",
-                "TargetDatabase": target_db,
-                "TargetSCAN": (_get_new_block(network, side) or {}).get("scan"),
-                "ServiceFromCSV": service_csv,
-                "ServiceFromJDBC": svc_jdbc
-            }
-
-        return {
-            "Status": "OK",
-            "Message": "Service extracted from New JDBC is valid for the target database.",
+        base = {
             "TargetDatabase": target_db,
             "TargetSCAN": (_get_new_block(network, side) or {}).get("scan"),
             "ServiceFromCSV": service_csv or None,
-            "ServiceFromJDBC": svc_jdbc
+            "ServiceFromJDBC": None
         }
 
+        # --- Applicability / prerequisites ---
+        if not applicable:
+            base.update({
+                "Applicable": False,
+                "Status": "N/A",
+                "Message": "Service information is missing or cannot be evaluated."
+            })
+            return base
+
+        if not scanpath_ok(side):
+            base.update({
+                "Status": "N/A",
+                "Message": "Service check skipped because SCAN path is not valid."
+            })
+            return base
+
+        svc_jdbc = _extract_service_from_jdbc(jdbc_str)
+        if not svc_jdbc:
+            base.update({
+                "Status": "N/A",
+                "Message": "Service information is missing or cannot be evaluated."
+            })
+            return base
+
+        base["ServiceFromJDBC"] = svc_jdbc
+
+        # --- S1 : internal consistency (CSV vs JDBC) ---
+        if service_csv and _norm(service_csv) != _norm(svc_jdbc):
+            base.update({
+                "Status": "KO",
+                "Message": "Service extracted from New JDBC does not match expected service."
+            })
+            return base
+
+        # =================================================
+        # S2 : Oracle runtime validation (NON BLOCKING)
+        # =================================================
+        probe = probe_service_or_sid(
+            service_name=svc_jdbc,
+            database=target_db
+        )
+
+        oracle_check = {
+            "OracleStatus": None,
+            "ResolvedAs": None,
+            "OracleMessage": None
+        }
+
+        if probe.get("service_found"):
+            oracle_check.update({
+                "OracleStatus": "OK",
+                "ResolvedAs": "SERVICE",
+                "OracleMessage": "Service exists and is served by the database."
+            })
+        elif probe.get("sid_found"):
+            oracle_check.update({
+                "OracleStatus": "WARN",
+                "ResolvedAs": "SID",
+                "OracleMessage": "SID resolved (legacy usage)."
+            })
+        else:
+            oracle_check.update({
+                "OracleStatus": "KO",
+                "ResolvedAs": "NONE",
+                "OracleMessage": "Service or SID not found on database."
+            })
+
+        base.update({
+            "Status": "OK",
+            "Message": "Service extracted from New JDBC is valid for the target database.",
+            "OracleCheck": oracle_check
+        })
+        return base
+
+    # ======================
     # Primary
+    # ======================
     out["Primary"] = eval_side("Primaire", True, new_jdbc)
 
+    # ======================
     # DR
+    # ======================
     dr_app = _is_dr_applicable(rawsource)
     dr_res = eval_side("DR", dr_app, new_jdbc_dr)
     if "Applicable" not in dr_res:
