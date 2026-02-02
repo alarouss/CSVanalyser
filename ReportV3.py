@@ -416,24 +416,59 @@ def show_object(o, debug=False):
     
         ("Resolved SCAN", prim.get("ResolvedSCAN")),
         ("Expected SCAN", prim.get("ExpectedSCAN")),
-        ("Expected Source", "ORACLE_CLUSTER (srvctl)"),
+        ("Expected Source", prim.get("ExpectedSource") or "ORACLE_CLUSTER (srvctl)"),
     ]
     
     print_table(rows)
 
-
+#----------------------------
     # ===============================
     # SERVICE VALIDATION (METIER)
     # ===============================
     service = st.get("ServiceCheck", {})
-    sv_p = service.get("Primary", {})
+    sv_p = service.get("Primary", {}) or {}
 
     print_section("SERVICE VALIDATION")
-    print_table([
+
+    rows = [
         ("Primary Status", format_status_flag(sv_p.get("Status"))),
         ("Primary Message", sv_p.get("Message")),
-    ])
+    ]
 
+    # Détails cohérence "ServiceNaming" (si présent)
+    sn = sv_p.get("ServiceNaming") or {}
+    if sn:
+        rows += [
+            ("Naming Status", format_status_flag(sn.get("Status"))),
+            ("Naming Rule", sn.get("Rule")),
+            ("Naming Expected", sn.get("Expected")),
+            ("Naming Actual", sn.get("Actual")),
+            ("Naming Message", sn.get("Message")),
+        ]
+
+    # Détails OracleCheck (si présent)
+    oc = sv_p.get("OracleCheck") or {}
+    if oc:
+        # OracleStatus peut être OK / WARN / KO
+        ocs = oc.get("OracleStatus")
+        if ocs == "OK":
+            oc_disp = GREEN + u"✓ OK" + RESET
+        elif ocs == "KO":
+            oc_disp = RED + u"✗ KO" + RESET
+        elif ocs == "WARN":
+            oc_disp = YELLOW + u"⚠ WARN" + RESET
+        else:
+            oc_disp = YELLOW + u"⚠ N/A" + RESET
+
+        rows += [
+            ("Oracle Status", oc_disp),
+            ("Oracle Probe", oc.get("Probe")),
+            ("Oracle Detail", oc.get("Detail")),
+        ]
+
+    print_table(rows)
+
+#--------------
     if debug:
         print_section("RAWSOURCE (DEBUG)")
         dbg = o.get("RawSource_DEBUG", {})
