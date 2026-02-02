@@ -174,6 +174,10 @@ def compute_service_check(network, rawsource):
     """
     Authority: New JDBC (service extracted from New connection string).
     Depends on ScanPath being OK; if not OK, ServiceCheck => N/A (skipped).
+
+    Option 1:
+      - ServiceNaming  : cohérence métier (norme SRV_<TRIG>_<DATABASE>)
+      - OracleCheck    : réalité Oracle (SERVICE / SID / NONE), non bloquant
     """
     out = {"Rule": RULE_SERVICE}
 
@@ -190,7 +194,19 @@ def compute_service_check(network, rawsource):
         key = "Primary" if side == "Primaire" else "DR"
         return ((sp.get(key) or {}).get("Status") or "") == "OK"
 
+    def expected_service_name():
+        """
+        Norme métier : SRV_<TRIG>_<DATABASE>
+        Le TRIG est déduit du CSV si présent, sinon inconnu.
+        """
+        if not service_csv:
+            return None
+        return service_csv
+
     def eval_side(side, applicable, jdbc_str):
+        # --------------------------------
+        # Cas non applicable / non évaluable
+        # --------------------------------
         if not applicable:
             return {
                 "Applicable": False,
@@ -206,12 +222,31 @@ def compute_service_check(network, rawsource):
 
         svc_jdbc = _extract_service_from_jdbc(jdbc_str)
 
-        # -----------------------------
-        # S2 — Oracle probe (NON bloquant)
-        # -----------------------------
+        # ================================
+        # ServiceNaming — cohérence métier
+        # ================================
+        expected = expected_service_name()
+        service_naming = {
+            "Rule": "SRV_<TRIG>_<DATABASE>",
+            "Expected": expected,
+            "Actual": svc_jdbc,
+            "Status": None
+        }
+
+        if not svc_jdbc:
+            service_naming["Status"] = "N/A"
+        elif expected and _norm(expected) == _norm(svc_jdbc):
+            service_naming["Status"] = "OK"
+        else:
+            service_naming["Status"] = "KO"
+
+        # ================================
+        # OracleCheck — réalité Oracle (S2)
+        # ================================
         oracle_check = None
         if svc_jdbc:
             probe = probe_service_or_sid(svc_jdbc, target_db)
+
             if probe.get("service_found"):
                 oracle_check = {
                     "OracleStatus": "OK",
@@ -231,32 +266,38 @@ def compute_service_check(network, rawsource):
                     "Detail": "Neither service nor SID found in database."
                 }
 
-        # -----------------------------
-        # Validation interne (existante)
-        # -----------------------------
-        if service_csv and svc_jdbc and _norm(service_csv) != _norm(svc_jdbc):
-            return {
-                "Status": "KO",
-                "Message": "Service extracted from New JDBC does not match expected service.",
-                "ServiceFromCSV": service_csv,
-                "ServiceFromJDBC": svc_jdbc,
-                "OracleCheck": oracle_check
-            }
+        # ================================
+        # Status global (inchangé en esprit)
+        # ================================
+        if service_naming["Status"] == "KO":
+            status = "KO"
+            message = "Service name does not comply with naming convention."
+        else:
+            status = "OK"
+            message = "Service extracted from New JDBC is acceptable."
 
         return {
-            "Status": "OK",
-            "Message": "Service extracted from New JDBC is acceptable.",
+            "Status": status,
+            "Message": message,
             "ServiceFromCSV": service_csv or None,
             "ServiceFromJDBC": svc_jdbc,
+            "ServiceNaming": service_naming,
             "OracleCheck": oracle_check
         }
 
+    # ================================
+    # Primary
+    # ================================
     out["Primary"] = eval_side("Primaire", True, new_jdbc)
 
+    # ================================
+    # DR
+    # ================================
     dr_app = _is_dr_applicable(rawsource)
     out["DR"] = eval_side("DR", dr_app, new_jdbc_dr)
 
     return out
+
 
 #---------------------------------
 # -*- coding: utf-8 -*-
