@@ -313,3 +313,66 @@ def compute_service_declaration(new_jdbc_obj):
 
     return out
 #---------------------------------------------------------------
+# -*- coding: utf-8 -*-
+
+from Lib.io_common import ustr
+
+def compute_service_resolution(network, rawsource, oracle_probe):
+    """
+    S2 — Service functional validation (with Oracle probe)
+
+    - Non blocking
+    - Uses Oracle probe to check SERVICE_NAME or SID
+    - Produces Status.ServiceCheck
+
+    oracle_probe: callable(service_name=None, sid=None) -> dict
+    """
+
+    out = {
+        "Rule": "JDBC service or SID must resolve to an entity served by the target database.",
+        "Authority": "Oracle probe",
+        "Primary": {
+            "Status": "N/A",
+            "Declared": None,
+            "ResolvedAs": None,
+            "Message": None,
+            "Database": ustr(rawsource.get("Databases"))
+        }
+    }
+
+    svc = rawsource.get("Services")
+    if not svc:
+        out["Primary"]["Status"] = "N/A"
+        out["Primary"]["Message"] = "No service declared in JDBC."
+        return out
+
+    svc = ustr(svc).strip()
+    out["Primary"]["Declared"] = svc
+
+    # --- Oracle probe call ---
+    try:
+        probe = oracle_probe(service_name=svc)
+    except Exception as e:
+        out["Primary"]["Status"] = "WARN"
+        out["Primary"]["ResolvedAs"] = "UNKNOWN"
+        out["Primary"]["Message"] = "Oracle probe failed: %s" % e
+        return out
+
+    # --- Decision matrix ---
+    if probe.get("service_found"):
+        out["Primary"]["Status"] = "OK"
+        out["Primary"]["ResolvedAs"] = "SERVICE"
+        out["Primary"]["Message"] = "Service name resolved and served by target database."
+        return out
+
+    if probe.get("sid_found"):
+        out["Primary"]["Status"] = "WARN"
+        out["Primary"]["ResolvedAs"] = "SID"
+        out["Primary"]["Message"] = "SID used instead of SERVICE_NAME (legacy usage)."
+        return out
+
+    out["Primary"]["Status"] = "KO"
+    out["Primary"]["ResolvedAs"] = "NONE"
+    out["Primary"]["Message"] = "Declared service or SID not served by the target database."
+    return out
+#----------------------------------------------------------------------------------------------------
