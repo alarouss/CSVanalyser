@@ -29,6 +29,7 @@ def print_help():
 Usage:
  python ReportV3.py -summary
  python ReportV3.py -summary -new-cname-mismatch
+ python ReportV3.py -summary -scan-mismatch
  python ReportV3.py -summary ?
  python ReportV3.py -summary Application=?
  python ReportV3.py -summary Application=APP_1 Lot=5
@@ -37,6 +38,7 @@ Usage:
 
 Options:
  -new-cname-mismatch   (filtre: New/Primaire cname != scan)
+ -scan-mismatch        (filtre: ScanPath Primary = KO et ResolvedSCAN != ExpectedSCAN)
 """.encode("utf-8")
 
 # =================
@@ -46,7 +48,7 @@ def format_status_flag(v):
     if v == "KO":
         return RED + u"✗ KO" + RESET
     return YELLOW + u"⚠ N/A" + RESET
-    
+
 def coherence_value(o):
     coh = o.get("Status", {}).get("Coherence", {})
     v = coh.get("GlobalOK")
@@ -64,6 +66,7 @@ def coherence_label(o):
     if v == "KO":
         return RED + u"✗ KO" + RESET
     return YELLOW + u"⚠ N/A" + RESET
+
 # ================= CONFIG LOAD =================
 
 def load_main_conf():
@@ -177,6 +180,7 @@ FILTER_FIELDS.update({
                              .get("Primary", {})
                              .get("Status", "N/A"),
 })
+
 # ============================================================
 # FILTRE AJOUTÉ : New/Primaire cname != scan (sans régression)
 # ============================================================
@@ -208,6 +212,29 @@ def new_cname_mismatch(o):
         return False
 
     return c != s
+
+# ============================================================
+# NOUVEAU : ScanPath mismatch (ResolvedSCAN != ExpectedSCAN)
+# ============================================================
+def scanpath_mismatch(o):
+    st = o.get("Status", {}) or {}
+    prim = st.get("ScanPath", {}).get("Primary", {}) or {}
+
+    if prim.get("Status") != "KO":
+        return False
+
+    r = prim.get("ResolvedSCAN")
+    e = prim.get("ExpectedSCAN")
+    if not r or not e:
+        return False
+
+    try:
+        return ustr(r).strip().lower() != ustr(e).strip().lower()
+    except:
+        try:
+            return str(r).strip().lower() != str(e).strip().lower()
+        except:
+            return False
 
 def pager_wait():
     sys.stdout.write("\n-- More -- (SPACE to continue, q to quit)")
@@ -271,19 +298,14 @@ def print_summary(objs):
         # --- ScanPath / Service status (Primary only) ---
         scanpath_p = st.get("ScanPath", {}).get("Primary", {}).get("Status")
         service_p  = st.get("ServiceCheck", {}).get("Primary", {}).get("Status")
-        
-        scanpath_disp = format_status_flag(scanpath_p)
-        service_disp  = format_status_flag(service_p)
-        
-        # --- Coherence status (déjà existant chez toi) ---
-        coh_p = st.get("Coherence", {}).get("GlobalOK")
-        if coh_p is True:
-            coh_disp = GREEN + u"✓ OK" + RESET
-        elif coh_p is False:
-            coh_disp = RED + u"✗ KO" + RESET
-        else:
-            coh_disp = YELLOW + u"⚠ N/A" + RESET
 
+        # ScanPath display avec marqueur KO! si mismatch Resolved/Expected
+        if scanpath_p == "KO" and scanpath_mismatch(o):
+            scanpath_disp = RED + u"✗ KO!" + RESET
+        else:
+            scanpath_disp = format_status_flag(scanpath_p)
+
+        service_disp  = format_status_flag(service_p)
 
         cur_s, _ = compute_block_status(net.get("Current"))
         new_s, _ = compute_block_status(net.get("New"))
@@ -494,6 +516,7 @@ if __name__ == "__main__":
                 for k in sorted(FILTER_FIELDS.keys()):
                     print " ",k
                 print "  -new-cname-mismatch"
+                print "  -scan-mismatch"
                 sys.exit(0)
             if "=" in a:
                 k,v = a.split("=",1)
@@ -514,6 +537,10 @@ if __name__ == "__main__":
         # ✅ filtre ajouté (sans impact sur le reste)
         if "-new-cname-mismatch" in args:
             objs = [o for o in objs if new_cname_mismatch(o)]
+
+        # ✅ filtre mismatch Resolved/Expected SCAN
+        if "-scan-mismatch" in args:
+            objs = [o for o in objs if scanpath_mismatch(o)]
 
         print_summary(objs)
         sys.exit(0)
