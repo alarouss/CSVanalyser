@@ -398,30 +398,24 @@ def show_object(o, debug=False):
     # ===============================
     # SCAN PATH VALIDATION (METIER)
     # ===============================
-    scanpath = st.get("ScanPath", {})
-    sp_p = scanpath.get("Primary", {})
-
     print_section("SCAN PATH VALIDATION")
 
     sp = st.get("ScanPath", {})
-    prim = sp.get("Primary", {})
-    
+    prim = sp.get("Primary", {}) or {}
+
     rows = [
         ("Primary Status",
          GREEN + u"✓ OK" + RESET if prim.get("Status") == "OK"
          else RED + u"✗ KO" + RESET if prim.get("Status") == "KO"
          else YELLOW + u"⚠ N/A" + RESET),
-    
+
         ("Primary Message", prim.get("Message")),
-    
         ("Resolved SCAN", prim.get("ResolvedSCAN")),
         ("Expected SCAN", prim.get("ExpectedSCAN")),
         ("Expected Source", prim.get("ExpectedSource") or "ORACLE_CLUSTER (srvctl)"),
     ]
-    
     print_table(rows)
 
-#----------------------------
     # ===============================
     # SERVICE VALIDATION (METIER)
     # ===============================
@@ -435,7 +429,7 @@ def show_object(o, debug=False):
         ("Primary Message", sv_p.get("Message")),
     ]
 
-    # Détails cohérence "ServiceNaming" (si présent)
+    # --- ServiceNaming (cohérence métier) ---
     sn = sv_p.get("ServiceNaming") or {}
     if sn:
         rows += [
@@ -443,13 +437,11 @@ def show_object(o, debug=False):
             ("Naming Rule", sn.get("Rule")),
             ("Naming Expected", sn.get("Expected")),
             ("Naming Actual", sn.get("Actual")),
-            ("Naming Message", sn.get("Message")),
         ]
 
-    # Détails OracleCheck (si présent)
+    # --- OracleCheck (sonde Oracle, non bloquante) ---
     oc = sv_p.get("OracleCheck") or {}
     if oc:
-        # OracleStatus peut être OK / WARN / KO
         ocs = oc.get("OracleStatus")
         if ocs == "OK":
             oc_disp = GREEN + u"✓ OK" + RESET
@@ -468,7 +460,6 @@ def show_object(o, debug=False):
 
     print_table(rows)
 
-#--------------
     if debug:
         print_section("RAWSOURCE (DEBUG)")
         dbg = o.get("RawSource_DEBUG", {})
