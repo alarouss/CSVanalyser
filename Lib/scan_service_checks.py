@@ -269,13 +269,15 @@ def compute_service_check(network, rawsource):
         # ================================
         # Status global (inchangé en esprit)
         # ================================
-        if service_naming["Status"] == "KO":
+        if oracle_check and oracle_check.get("OracleStatus") == "KO":
             status = "KO"
+            message = "Service/SID not found in database."
+        elif service_naming["Status"] == "KO":
+            status = "WARN"
             message = "Service name does not comply with naming convention."
         else:
             status = "OK"
             message = "Service extracted from New JDBC is acceptable."
-
         return {
             "Status": status,
             "Message": message,
