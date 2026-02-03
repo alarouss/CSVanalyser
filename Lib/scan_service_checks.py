@@ -214,11 +214,9 @@ def compute_service_check(network, rawsource):
                 "Message": "Service information is missing or cannot be evaluated."
             }
 
-        if not scanpath_ok(side):
-            return {
-                "Status": "N/A",
-                "Message": "Service check skipped because SCAN path is not valid."
-            }
+        # ScanPath n’est PAS bloquant pour le service
+        # On continue toujours l’évaluation du service
+        pass
 
         svc_jdbc = _extract_service_from_jdbc(jdbc_str)
 
