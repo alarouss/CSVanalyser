@@ -420,3 +420,35 @@ def compute_service_resolution(network, rawsource, oracle_probe):
     out["Primary"]["Message"] = "Declared service or SID not served by the target database."
     return out
 #----------------------------------------------------------------------------------------------------
+def compute_decision(status):
+    """
+    Synthèse décisionnelle NON bloquante.
+    Priorité : KO > WARN > OK
+    """
+    # Par défaut
+    decision = {"Level": "OK", "Reason": None}
+
+    scanpath = (status.get("ScanPath") or {}).get("Primary", {})
+    service  = (status.get("ServiceCheck") or {}).get("Primary", {})
+
+    # 1) ScanPath KO → WARN (service peut être OK)
+    if scanpath.get("Status") == "KO":
+        decision["Level"] = "WARN"
+        decision["Reason"] = (
+            "SCAN mismatch (expected %s, got %s)" %
+            (scanpath.get("ExpectedSCAN"), scanpath.get("ResolvedSCAN"))
+        )
+
+    # 2) Service KO → KO (bloquant fonctionnel)
+    if service.get("Status") == "KO":
+        decision["Level"] = "KO"
+        decision["Reason"] = service.get("Message")
+
+    # 3) SID détecté → WARN (legacy accepté)
+    oc = service.get("OracleCheck") or {}
+    if oc.get("OracleStatus") == "WARN" and decision["Level"] == "OK":
+        decision["Level"] = "WARN"
+        decision["Reason"] = oc.get("Detail")
+
+    return decision
+
