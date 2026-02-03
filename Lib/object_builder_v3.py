@@ -15,6 +15,7 @@ from Lib.host_coherence import check_host_coherence
 import Lib.analyse_builder_v3 as ABV3
 from Lib.host_coherence import check_host_coherence
 from Lib.scan_service_checks import compute_scan_path, compute_service_check
+from Lib.decision import compute_decision
 
 # ------------------------------------------------
 def build_object_v3(row, obj_id, oem_conn, pos, total, force):
