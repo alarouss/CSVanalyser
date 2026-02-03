@@ -204,6 +204,7 @@ def build_object_v3(row, obj_id, oem_conn, pos, total, force):
     status["Coherence"] = coh
     status["ScanPath"] = compute_scan_path(net, raw)
     status["ServiceCheck"] = compute_service_check(net, raw)
+    status["Decision"] = compute_decision(status)
 
     # =====================================================
     # RETURN FINAL
