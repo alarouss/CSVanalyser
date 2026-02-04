@@ -115,6 +115,36 @@ def color_err(msg):
 
 def color_dirty(v):
     return RED + u"YES" + RESET if v else GREEN + u"NO" + RESET
+#=================================================
+def compute_conclusion(o):
+    st = o.get("Status", {})
+
+    # 1. Dirty = KO immédiat
+    if st.get("Dirty"):
+        return "KO", "Object marked dirty"
+
+    # 2. ScanPath
+    sp = st.get("ScanPath", {}).get("Primary", {}).get("Status")
+    if sp == "KO":
+        return "KO", "Host does not resolve to target SCAN"
+
+    # 3. Service
+    svc = st.get("ServiceCheck", {}).get("Primary", {})
+    svc_status = svc.get("Status")
+    oracle = (svc.get("OracleCheck") or {}).get("OracleStatus")
+
+    if svc_status == "KO":
+        return "ANALYZE", "Service naming mismatch"
+
+    if oracle == "WARN":
+        return "ANALYZE", "SID used instead of service"
+
+    # 4. Coherence
+    coh = st.get("Coherence", {}).get("GlobalOK")
+    if coh is False:
+        return "ANALYZE", "Hostname coherence issue"
+
+    return "OK", "No blocking issue detected"
 
 # ================= BLOCK STATUS =================
 
