@@ -294,6 +294,13 @@ def check_tcp(addresses, timeout=3):
 # ============================================================
 
 import subprocess
+def u(s):
+    if isinstance(s, unicode):
+        return s
+    try:
+        return unicode(s, "utf-8", "ignore")
+    except:
+        return unicode(str(s), "ascii", "ignore")
 
 def normalize(s):
     return s.upper().replace("_", "").replace("-", "")
@@ -351,9 +358,10 @@ def check_oracle_service_ssh(addresses, jdbc_service, ssh_user="oracle", timeout
         elif close:
             warn(
                 tag,
-                "JDBC service %s not found – %d close Oracle service(s) detected: %s"
-                % (jdbc_service, len(close), ", ".join(close[:4]))
+                u("JDBC service %s not found - %d close Oracle service(s) detected: %s")
+                % (u(jdbc_service), len(close), u(", ".join(close[:4])))
             )
+
         else:
             warn(
                 tag,
