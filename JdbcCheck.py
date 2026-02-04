@@ -15,6 +15,9 @@
 import sys
 import os
 import socket
+import subprocess
+import re
+
 
 # ============================================================
 # OUTPUT
@@ -284,6 +287,52 @@ def check_tcp(addresses, timeout=3):
                 s.close()
             except:
                 pass
+# ============================================================
+# ORACLE (BLOQUANT, sans user/pass)
+#   Vérifie que le listener connaît le SERVICE_NAME
+#   via: lsnrctl services
+# ============================================================
+
+def check_oracle_service(addresses, service):
+    """
+    For each address (PRIMARY/DR), check that the listener
+    knows SERVICE_NAME using `lsnrctl services`.
+    """
+    for a in addresses:
+        role = a["role"]
+        host = a["host"]
+        port = a["port"]
+        tag = "ORACLE][%s" % role
+
+        # Appel lsnrctl services (local)
+        try:
+            p = subprocess.Popen(
+                ["lsnrctl", "services"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            outp, errp = p.communicate()
+        except Exception as e:
+            ko(tag, "cannot execute lsnrctl (%s)" % str(e))
+
+        if p.returncode != 0:
+            ko(tag, "lsnrctl returned non-zero code")
+
+        txt = outp.decode("utf-8", "ignore")
+
+        # Vérifie présence du service
+        # (on accepte SERVICE_NAME ou SERVICE)
+        svc_ok = False
+        for line in txt.splitlines():
+            l = line.upper()
+            if service.upper() in l:
+                svc_ok = True
+                break
+
+        if not svc_ok:
+            ko(tag, "service %s not known by listener" % service)
+
+        ok(tag, "service %s known by listener" % service)
 
 # ============================================================
 # MAIN
@@ -307,5 +356,7 @@ def main():
     check_dns(addresses)
     check_tcp(addresses)
 
+    # ---- ORACLE (sans user/pass) ----
+    check_oracle_service(addresses, service)
 if __name__ == "__main__":
     main()
