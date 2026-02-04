@@ -11,7 +11,7 @@
 #   TCP        : connectivité host:port (bloquante)
 #
 # Python 2.6 compatible
-
+print("### JdbcCheck VERSION ORACLE PATCH 2026-02-04 ###")
 import sys
 import os
 import socket
