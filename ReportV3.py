@@ -375,6 +375,14 @@ def print_summary(objs):
             applicable=bool(rs.get("DR O/N"))
         )
         oem_s, _ = compute_block_status(net.get("OEM"))
+        conc, _ = compute_conclusion(o)
+
+        if conc == "OK":
+            conc_disp = GREEN + u"✓ OK" + RESET
+        elif conc == "KO":
+            conc_disp = RED + u"✗ KO" + RESET
+        else:
+            conc_disp = YELLOW + u"⚠ ANALYZE" + RESET
 
         row = [
             o.get("id",""),
@@ -391,10 +399,9 @@ def print_summary(objs):
             coherence_label(o),
             scanpath_disp,
             service_disp,
-            conclusion_label(o),
+            conc_disp,          # 👈 ICI
             color_dirty(st.get("Dirty")),
         ]
-
         out = u" "
         for (val,(h,w)) in zip(row,headers):
             out += pad(val,w) + u" | "
@@ -409,9 +416,15 @@ def show_object(o, debug=False):
     st  = o.get("Status", {})
     net = o.get("Network", {})
 
+    # ===============================
+    # HEADER
+    # ===============================
     print (u"\nID = %s — Database: %s" %
            (o.get("id",""), rs.get("Databases",""))).encode("utf-8")
 
+    # ===============================
+    # METADATA
+    # ===============================
     print_section("METADATA")
     print_table([
         ("Application", rs.get("Application")),
@@ -422,15 +435,17 @@ def show_object(o, debug=False):
         ("Acces", rs.get("Acces")),
     ])
 
-    for label, key, app in [
-        ("CURRENT JDBC", ("Current", "Primaire"), True),
-        ("NEW JDBC", ("New", "Primaire"), True),
-        ("NEW JDBC DR", ("New", "DR"), True),
-        ("OEM CONN", ("OEM", "Primaire"), True),
+    # ===============================
+    # JDBC / OEM BLOCKS
+    # ===============================
+    for label, key in [
+        ("CURRENT JDBC", ("Current", "Primaire")),
+        ("NEW JDBC", ("New", "Primaire")),
+        ("NEW JDBC DR", ("New", "DR")),
+        ("OEM CONN", ("OEM", "Primaire")),
     ]:
         print_section(label)
-
-        block = net.get(key[0], {}).get(key[1], {})
+        block = net.get(key[0], {}).get(key[1], {}) or {}
 
         rows = [
             ("Host", block.get("host")),
@@ -444,6 +459,9 @@ def show_object(o, debug=False):
 
         print_table(rows)
 
+    # ===============================
+    # STATUS (TECHNIQUE)
+    # ===============================
     print_section("STATUS")
     rows = [
         ("Valid Syntax", GREEN+"YES"+RESET if st.get("ValidSyntax") else RED+"NO"+RESET),
@@ -462,8 +480,8 @@ def show_object(o, debug=False):
     # COHERENCE HOSTNAME (METIER)
     # ===============================
     coh = st.get("Coherence") or {}
-
     coh_global = coh.get("GlobalOK")
+
     if coh_global is True:
         coh_str = GREEN + u"✓ OK" + RESET
     elif coh_global is False:
@@ -480,40 +498,34 @@ def show_object(o, debug=False):
     ])
 
     # ===============================
-    # SCAN PATH VALIDATION (METIER)
+    # SCAN PATH VALIDATION
     # ===============================
     print_section("SCAN PATH VALIDATION")
+    prim = (st.get("ScanPath", {}) or {}).get("Primary", {}) or {}
 
-    sp = st.get("ScanPath", {})
-    prim = sp.get("Primary", {}) or {}
-
-    rows = [
+    print_table([
         ("Primary Status",
          GREEN + u"✓ OK" + RESET if prim.get("Status") == "OK"
          else RED + u"✗ KO" + RESET if prim.get("Status") == "KO"
          else YELLOW + u"⚠ N/A" + RESET),
-
         ("Primary Message", prim.get("Message")),
         ("Resolved SCAN", prim.get("ResolvedSCAN")),
         ("Expected SCAN", prim.get("ExpectedSCAN")),
         ("Expected Source", prim.get("ExpectedSource") or "ORACLE_CLUSTER (srvctl)"),
-    ]
-    print_table(rows)
+    ])
 
     # ===============================
-    # SERVICE VALIDATION (METIER)
+    # SERVICE VALIDATION
     # ===============================
-    service = st.get("ServiceCheck", {})
-    sv_p = service.get("Primary", {}) or {}
-
     print_section("SERVICE VALIDATION")
+    sv_p = (st.get("ServiceCheck", {}) or {}).get("Primary", {}) or {}
 
     rows = [
         ("Primary Status", format_status_flag(sv_p.get("Status"))),
         ("Primary Message", sv_p.get("Message")),
     ]
 
-    # --- ServiceNaming (cohérence métier) ---
+    # --- ServiceNaming ---
     sn = sv_p.get("ServiceNaming") or {}
     if sn:
         rows += [
@@ -523,16 +535,16 @@ def show_object(o, debug=False):
             ("Naming Actual", sn.get("Actual")),
         ]
 
-    # --- OracleCheck (sonde Oracle, non bloquante) ---
+    # --- OracleCheck ---
     oc = sv_p.get("OracleCheck") or {}
     if oc:
         ocs = oc.get("OracleStatus")
         if ocs == "OK":
             oc_disp = GREEN + u"✓ OK" + RESET
-        elif ocs == "KO":
-            oc_disp = RED + u"✗ KO" + RESET
         elif ocs == "WARN":
             oc_disp = YELLOW + u"⚠ WARN" + RESET
+        elif ocs == "KO":
+            oc_disp = RED + u"✗ KO" + RESET
         else:
             oc_disp = YELLOW + u"⚠ N/A" + RESET
 
@@ -544,10 +556,23 @@ def show_object(o, debug=False):
 
     print_table(rows)
 
+    # ===============================
+    # CONCLUSION (LECTURE HUMAINE)
+    # ===============================
+    if "compute_conclusion" in globals():
+        conc, reason = compute_conclusion(o)
+        print_section("CONCLUSION")
+        print_table([
+            ("Conclusion", conc),
+            ("Reason", reason),
+        ])
+
+    # ===============================
+    # DEBUG
+    # ===============================
     if debug:
         print_section("RAWSOURCE (DEBUG)")
-        dbg = o.get("RawSource_DEBUG", {})
-        print_table(sorted(dbg.items()))
+        print_table(sorted((o.get("RawSource_DEBUG") or {}).items()))
 
 # ================= MAIN =================
 
