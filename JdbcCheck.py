@@ -1,16 +1,19 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# JdbcCheck.py — INPUT step only
-# Python 2.6 compatible
+# JdbcCheck.py
+# Étapes implémentées :
+#   INPUT  : lecture explicite d'un fichier string.ini
+#   SYNTAX : validation syntaxique JDBC (bloquante)
 #
-# Usage:
-#   python JdbcCheck.py string.ini
+# Python 2.6 compatible
 
 import sys
 import os
 
-# ---------- output helpers ----------
+# ============================================================
+# OUTPUT HELPERS (jamais silencieux)
+# ============================================================
 
 def out(msg):
     try:
@@ -18,27 +21,29 @@ def out(msg):
     except:
         print msg
 
-def ok(msg):
-    out("[INPUT] OK – %s" % msg)
+def ok(tag, msg):
+    out("[%s] OK – %s" % (tag, msg))
 
-def ko(msg):
-    out("[INPUT] KO – %s" % msg)
+def ko(tag, msg):
+    out("[%s] KO – %s" % (tag, msg))
     sys.exit(1)
 
-# ---------- minimal INI parser (Python 2.6 safe) ----------
+# ============================================================
+# INPUT — lecture string.ini
+# ============================================================
 
 def read_jdbc_from_ini(path):
     if not os.path.isfile(path):
-        ko("file not found: %s" % path)
+        ko("INPUT", "file not found: %s" % path)
 
     section_found = False
-    conn_lines = []
     in_connection = False
+    conn_lines = []
 
     try:
         f = open(path, "r")
     except Exception as e:
-        ko("cannot open file %s (%s)" % (path, str(e)))
+        ko("INPUT", "cannot open file %s (%s)" % (path, str(e)))
 
     for raw in f:
         line = raw.strip()
@@ -52,53 +57,102 @@ def read_jdbc_from_ini(path):
             continue
 
         if line.startswith("[") and line.endswith("]"):
-            # another section
             in_connection = False
             continue
 
         if section_found:
             if line.lower().startswith("connection"):
-                # connection = ....
                 parts = line.split("=", 1)
                 if len(parts) != 2:
-                    ko("invalid connection definition")
-                value = parts[1].strip()
-                conn_lines.append(value)
+                    ko("INPUT", "invalid JDBC connection definition")
+                conn_lines.append(parts[1].strip())
                 in_connection = True
                 continue
 
             if in_connection:
-                # multiline continuation
                 conn_lines.append(line)
 
     f.close()
 
     if not section_found:
-        ko("missing [JDBC] section")
+        ko("INPUT", "missing [JDBC] section")
 
     if not conn_lines:
-        ko("missing JDBC/connection entry")
+        ko("INPUT", "missing JDBC/connection entry")
 
     jdbc = "".join(conn_lines).strip()
 
     if not jdbc:
-        ko("empty JDBC connection value")
+        ko("INPUT", "empty JDBC connection value")
 
+    ok("INPUT", "JDBC string loaded from %s (length=%d)" % (path, len(jdbc)))
     return jdbc
 
-# ---------- main ----------
+# ============================================================
+# SYNTAX — validation bloquante
+# ============================================================
+
+def check_syntax(jdbc):
+    tag = "SYNTAX"
+
+    # ---- Prefixe JDBC ----
+    prefix = "jdbc:oracle:thin:@"
+    if not jdbc.lower().startswith(prefix):
+        ko(tag, "invalid JDBC prefix (expected %s)" % prefix)
+    ok(tag, "prefix valid")
+
+    # ---- Parenthèses équilibrées ----
+    level = 0
+    pos = 0
+    for ch in jdbc:
+        if ch == "(":
+            level += 1
+        elif ch == ")":
+            level -= 1
+            if level < 0:
+                ko(tag, "parentheses mismatch at position %d" % pos)
+        pos += 1
+
+    if level != 0:
+        ko(tag, "parentheses mismatch (unbalanced)")
+
+    ok(tag, "parentheses balanced")
+
+    # ---- Blocs obligatoires ----
+    low = jdbc.lower()
+    mandatory = [
+        "(description=",
+        "(address",
+        "(connect_data=",
+        "(service_name="
+    ]
+
+    for m in mandatory:
+        if m not in low:
+            ko(tag, "missing mandatory block %s" % m.upper())
+
+    ok(tag, "mandatory blocks detected")
+
+# ============================================================
+# MAIN
+# ============================================================
+
+def usage():
+    out("Usage:")
+    out("  python JdbcCheck.py string.ini")
+    sys.exit(1)
 
 def main():
     if len(sys.argv) < 2:
-        ko("missing ini file argument (usage: python JdbcCheck.py string.ini)")
+        usage()
 
     ini_path = sys.argv[1]
+
+    # ---- INPUT ----
     jdbc = read_jdbc_from_ini(ini_path)
 
-    ok("JDBC string loaded from %s (length=%d)" % (ini_path, len(jdbc)))
-
-    # For now, we STOP HERE (as agreed)
-    # Next steps (SYNTAX / STRUCTURE / COHERENCE) will consume `jdbc`
+    # ---- SYNTAX ----
+    check_syntax(jdbc)
 
     return 0
 
