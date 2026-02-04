@@ -305,16 +305,16 @@ def check_oracle_service_ssh(addresses, service, ssh_user="oracle", timeout=10):
             "source ~/.bash_profile >/dev/null 2>&1 && "
             "lsnrctl services"
         )
-
-       
         cmd = [
             "ssh",
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=%d" % timeout,
             "-o", "CheckHostIP=no",
+            "-o", "StrictHostKeyChecking=no",
             "%s@%s" % (ssh_user, host),
-            "bash", "-lc", "lsnrctl services"
+            "bash -lc 'lsnrctl services'"
         ]
+
         print("### ORACLE SSH CMD ###")
         print(cmd)
         try:
