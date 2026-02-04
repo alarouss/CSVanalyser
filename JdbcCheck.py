@@ -32,15 +32,15 @@ def out(msg):
     except:
         print msg
 
-def warn(tag, msg):
-    out("[{0}] WARNING - {1}".format(tag, msg))
-
 def ok(tag, msg):
     out("[{0}] OK - {1}".format(tag, msg))
+def warn(tag, msg):
+    out("[{0}] WARNING - {1}".format(tag, msg))
 
 def ko(tag, msg):
     out("[{0}] KO - {1}".format(tag, msg))
     sys.exit(1)
+
 
 
 # ============================================================
