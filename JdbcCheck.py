@@ -7,11 +7,13 @@
 #   SYNTAX     : validation JDBC (bloquante)
 #   STRUCTURE  : extraction ADDRESS / SERVICE (bloquante)
 #   COHERENCE  : règles métier (WARNING uniquement)
+#   DNS        : résolution DNS/SCAN (bloquante par hôte)
 #
 # Python 2.6 compatible
 
 import sys
 import os
+import socket
 
 # ============================================================
 # OUTPUT
@@ -207,10 +209,6 @@ def extract_trig(dbname):
     return d
 
 def check_coherence(addresses, service, dbname):
-    tag_h = "COHERENCE][HOST"
-    tag_s = "COHERENCE][SERVICE"
-    tag_m = "COHERENCE][HOST↔SERVICE"
-
     if not dbname:
         warn("COHERENCE", "Database name not provided, coherence checks limited")
         return
@@ -218,37 +216,49 @@ def check_coherence(addresses, service, dbname):
     env_db = extract_env(dbname)
     trig = extract_trig(dbname)
 
-    # --- HOST coherence ---
     for a in addresses:
         short = a["host"].split(".")[0].upper()
         role = a["role"]
-
-        if role not in ("PRIMARY", "DR"):
-            warn(tag_h + "][%s" % role,
-                 "cannot determine role from hostname %s" % short)
-            continue
-
         env_host = short[-4:-2]
         if env_host != env_db:
-            warn(tag_h + "][%s" % role,
+            warn("COHERENCE][HOST][%s" % role,
                  "environment mismatch (host=%s db=%s)" % (env_host, env_db))
         else:
-            ok(tag_h + "][%s" % role, "naming convention respected")
+            ok("COHERENCE][HOST][%s" % role, "naming convention respected")
 
-    # --- SERVICE coherence ---
     expected_service = "SRV_%s_%s" % (trig, dbname)
     if service.upper() != expected_service.upper():
-        warn(tag_s,
+        warn("COHERENCE][SERVICE",
              "expected %s, found %s" % (expected_service, service))
     else:
-        ok(tag_s, "naming convention respected")
+        ok("COHERENCE][SERVICE", "naming convention respected")
 
-    # --- HOST ↔ SERVICE ---
     if trig and trig not in service.upper():
-        warn(tag_m,
+        warn("COHERENCE][HOST↔SERVICE",
              "TRIG %s not found in service name %s" % (trig, service))
     else:
-        ok(tag_m, "consistent naming")
+        ok("COHERENCE][HOST↔SERVICE", "consistent naming")
+
+# ============================================================
+# DNS (BLOQUANT)
+# ============================================================
+
+def check_dns(addresses):
+    for a in addresses:
+        role = a["role"]
+        host = a["host"]
+        tag = "DNS][%s" % role
+        try:
+            infos = socket.getaddrinfo(host, None)
+            ips = set()
+            for inf in infos:
+                if len(inf) >= 5:
+                    ips.add(inf[4][0])
+            if not ips:
+                ko(tag, "no IP resolved for host %s" % host)
+            ok(tag, "%s resolves to %d IP(s)" % (host, len(ips)))
+        except Exception as e:
+            ko(tag, "DNS resolution failed for %s (%s)" % (host, str(e)))
 
 # ============================================================
 # MAIN
@@ -269,6 +279,7 @@ def main():
     check_syntax(jdbc)
     addresses, service = check_structure(jdbc)
     check_coherence(addresses, service, dbname)
+    check_dns(addresses)
 
 if __name__ == "__main__":
     main()
