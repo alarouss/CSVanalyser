@@ -10,6 +10,23 @@
 
 from Lib.io_common import ustr
 
+import re
+
+def extract_seq_from_database(dbname):
+    """
+    Extrait la séquence (P0, P1, P2, ...) depuis le nom de la base.
+    Exemples:
+      M19ACCP0 -> P0
+      M19GNRP1 -> P1
+    """
+    if not dbname:
+        return None
+
+    m = re.search(r'(P\d+)$', dbname.upper())
+    if m:
+        return m.group(1)
+
+    return None
 
 def _norm_host(s):
     if not s:
