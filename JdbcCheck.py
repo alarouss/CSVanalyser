@@ -9,52 +9,37 @@
 #   COHERENCE  : règles métier (WARNING uniquement)
 #   DNS        : résolution DNS/SCAN (bloquante)
 #   TCP        : connectivité host:port (bloquante)
-#   ORACLE     : Option C (non bloquant) + suggestions services proches
 #
 # Python 2.6 compatible
-
+print("### JdbcCheck VERSION ORACLE PATCH 2026-02-04 ###")
 import sys
 import os
 import socket
 import subprocess
+import re
 
-print "### JdbcCheck VERSION ORACLE PATCH 2026-02-04 ###"
 
 # ============================================================
-# UNICODE HELPERS (PY2 SAFE)
+# OUTPUT
 # ============================================================
-
-def u(s):
-    if isinstance(s, unicode):
-        return s
-    try:
-        return unicode(s, "utf-8", "ignore")
-    except:
-        try:
-            return unicode(str(s), "utf-8", "ignore")
-        except:
-            return unicode(str(s), "ascii", "ignore")
 
 def out(msg):
-    """Print safely in Python 2.6 (UTF-8)."""
-    umsg = u(msg)
     try:
-        sys.stdout.write(umsg.encode("utf-8") + "\n")
+        sys.stdout.write(msg + "\n")
     except:
-        try:
-            print umsg.encode("utf-8")
-        except:
-            print str(umsg)
-
+        print msg
+def warn(tag, msg):
+    s = u"[{}] WARNING - {}".format(tag, msg)
+    try:
+        print(s.encode("utf-8"))
+    except:
+        print(str(s))
 def ok(tag, msg):
     out(u"[{}] OK - {}".format(tag, msg))
 
-def warn(tag, msg):
-    out(u"[{}] WARNING - {}".format(tag, msg))
-
 def ko(tag, msg):
     out(u"[{}] KO - {}".format(tag, msg))
-    sys.exit(1)
+
 
 # ============================================================
 # INPUT
@@ -255,10 +240,10 @@ def check_coherence(addresses, service, dbname):
         ok("COHERENCE][SERVICE", "naming convention respected")
 
     if trig and trig not in service.upper():
-        warn("COHERENCE][HOST<->SERVICE",
+        warn("COHERENCE][HOST↔SERVICE",
              "TRIG %s not found in service name %s" % (trig, service))
     else:
-        ok("COHERENCE][HOST<->SERVICE", "consistent naming")
+        ok("COHERENCE][HOST↔SERVICE", "consistent naming")
 
 # ============================================================
 # DNS
@@ -304,31 +289,36 @@ def check_tcp(addresses, timeout=3):
                 s.close()
             except:
                 pass
+# ============================================================
+# ORACLE (Option C + SCAN + PATH Oracle)
+#   PRIMARY : bloquant
+#   DR      : WARNING si SSH indisponible
+# ============================================================
 
-# ============================================================
-# ORACLE (Option C + suggestions)
-#   - Non bloquant
-#   - Propose 3-4 services proches
-# ============================================================
+import subprocess
+def u(s):
+    if isinstance(s, unicode):
+        return s
+    try:
+        return unicode(s, "utf-8", "ignore")
+    except:
+        return unicode(str(s), "ascii", "ignore")
 
 def normalize(s):
-    return u(s).upper().replace("_", "").replace("-", "")
+    return s.upper().replace("_", "").replace("-", "")
 
 def extract_services(listener_output):
     services = []
     for line in listener_output.splitlines():
         line = line.strip()
-        if line.startswith('Service "'):
-            try:
-                svc = line.split('"')[1]
-                services.append(svc)
-            except:
-                pass
+        if line.startswith("Service \""):
+            svc = line.split("\"")[1]
+            services.append(svc)
     return services
 
+
 def check_oracle_service_ssh(addresses, jdbc_service, ssh_user="oracle", timeout=10):
-    jdbc_service_u = u(jdbc_service)
-    jdbc_norm = normalize(jdbc_service_u)
+    jdbc_norm = normalize(jdbc_service)
 
     for a in addresses:
         role = a["role"]
@@ -349,32 +339,37 @@ def check_oracle_service_ssh(addresses, jdbc_service, ssh_user="oracle", timeout
             p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             outp, errp = p.communicate()
         except Exception as e:
-            warn(tag, "SSH execution failed (%s) - listener check skipped" % e)
+            warn(tag, "SSH execution failed (%s) – listener check skipped" % e)
             continue
 
         if p.returncode != 0:
-            warn(tag, "SSH/lsnrctl failed (%s) - listener check skipped" % (errp or "").strip())
+            warn(tag, "SSH/lsnrctl failed (%s) – listener check skipped" % (errp or "").strip())
             continue
 
         txt = outp.decode("utf-8", "ignore")
         services = extract_services(txt)
 
+        # correspondances proches
         close = []
         for s in services:
-            sn = normalize(s)
-            if jdbc_norm in sn or sn in jdbc_norm:
+            if jdbc_norm in normalize(s) or normalize(s) in jdbc_norm:
                 close.append(s)
 
-        if jdbc_service_u in services:
-            ok(tag, "service %s registered in listener" % jdbc_service_u)
+        if jdbc_service in services:
+            ok(tag, "service %s registered in listener" % jdbc_service)
         elif close:
-            warn(tag,
-                 u("JDBC service %s not found - %d close Oracle service(s) detected: %s") %
-                 (jdbc_service_u, len(close), u(", ".join(close[:4]))))
+            warn(
+                tag,
+                u("JDBC service %s not found - %d close Oracle service(s) detected: %s")
+                % (u(jdbc_service), len(close), u(", ".join(close[:4])))
+            )
+
         else:
-            warn(tag,
-                 u("JDBC service %s not found - no close Oracle service detected") %
-                 (jdbc_service_u,))
+            warn(
+                tag,
+                "JDBC service %s not found – no close Oracle service detected"
+                % jdbc_service
+            )
 
 # ============================================================
 # MAIN
@@ -398,7 +393,9 @@ def main():
     check_dns(addresses)
     check_tcp(addresses)
 
+    # ---- ORACLE (sans user/pass) ----
+    #check_oracle_service(addresses, service)
+    # ---- ORACLE (via SSH on DB servers) ----
     check_oracle_service_ssh(addresses, service)
-
 if __name__ == "__main__":
     main()
