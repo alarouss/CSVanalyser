@@ -3,8 +3,9 @@
 #
 # JdbcCheck.py
 # Étapes implémentées :
-#   INPUT  : lecture explicite d'un fichier string.ini
-#   SYNTAX : validation syntaxique JDBC (bloquante)
+#   INPUT     : lecture explicite de string.ini
+#   SYNTAX    : validation syntaxique JDBC (bloquante)
+#   STRUCTURE : extraction ADDRESS / SERVICE_NAME (bloquante)
 #
 # Python 2.6 compatible
 
@@ -95,13 +96,11 @@ def read_jdbc_from_ini(path):
 def check_syntax(jdbc):
     tag = "SYNTAX"
 
-    # ---- Prefixe JDBC ----
     prefix = "jdbc:oracle:thin:@"
     if not jdbc.lower().startswith(prefix):
         ko(tag, "invalid JDBC prefix (expected %s)" % prefix)
     ok(tag, "prefix valid")
 
-    # ---- Parenthèses équilibrées ----
     level = 0
     pos = 0
     for ch in jdbc:
@@ -118,7 +117,6 @@ def check_syntax(jdbc):
 
     ok(tag, "parentheses balanced")
 
-    # ---- Blocs obligatoires ----
     low = jdbc.lower()
     mandatory = [
         "(description=",
@@ -132,6 +130,95 @@ def check_syntax(jdbc):
             ko(tag, "missing mandatory block %s" % m.upper())
 
     ok(tag, "mandatory blocks detected")
+
+# ============================================================
+# STRUCTURE — extraction ADDRESS / SERVICE
+# ============================================================
+
+def extract_between(s, start_token, end_token, start_pos):
+    i = s.find(start_token, start_pos)
+    if i < 0:
+        return None, -1
+    i += len(start_token)
+    j = s.find(end_token, i)
+    if j < 0:
+        return None, -1
+    return s[i:j], j
+
+def extract_addresses(jdbc):
+    addresses = []
+    low = jdbc.lower()
+    pos = 0
+
+    while True:
+        block, pos = extract_between(low, "(address=", ")", pos)
+        if block is None:
+            break
+
+        host = None
+        port = None
+        protocol = None
+
+        b = block
+
+        h, _ = extract_between(b, "host=", ")", 0)
+        if h:
+            host = h
+
+        p, _ = extract_between(b, "port=", ")", 0)
+        if p:
+            port = p
+
+        pr, _ = extract_between(b, "protocol=", ")", 0)
+        if pr:
+            protocol = pr
+
+        addresses.append({
+            "host": host,
+            "port": port,
+            "protocol": protocol
+        })
+
+    return addresses
+
+def extract_service(jdbc):
+    low = jdbc.lower()
+    val, _ = extract_between(low, "service_name=", ")", 0)
+    return val
+
+def classify_role(host):
+    if not host:
+        return "UNKNOWN"
+    short = host.split(".")[0].upper()
+    if short.endswith("DB"):
+        return "PRIMARY"
+    if short.endswith("DR"):
+        return "DR"
+    return "UNKNOWN"
+
+def check_structure(jdbc):
+    tag = "STRUCTURE"
+
+    addresses = extract_addresses(jdbc)
+    if not addresses:
+        ko(tag, "no ADDRESS found")
+
+    ok(tag, "%d address(es) detected" % len(addresses))
+
+    for a in addresses:
+        if not a["host"] or not a["port"]:
+            ko(tag, "ADDRESS missing host or port")
+
+        role = classify_role(a["host"])
+        ok("STRUCTURE][%s" % role,
+           "host=%s port=%s protocol=%s" %
+           (a["host"], a["port"], a["protocol"] or "?"))
+
+    service = extract_service(jdbc)
+    if not service:
+        ko(tag, "SERVICE_NAME not found")
+
+    ok("STRUCTURE][SERVICE", "service_name=%s" % service)
 
 # ============================================================
 # MAIN
@@ -153,6 +240,9 @@ def main():
 
     # ---- SYNTAX ----
     check_syntax(jdbc)
+
+    # ---- STRUCTURE ----
+    check_structure(jdbc)
 
     return 0
 
