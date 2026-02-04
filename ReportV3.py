@@ -29,7 +29,6 @@ def print_help():
 Usage:
  python ReportV3.py -summary
  python ReportV3.py -summary -new-cname-mismatch
- python ReportV3.py -summary -scan-mismatch
  python ReportV3.py -summary ?
  python ReportV3.py -summary Application=?
  python ReportV3.py -summary Application=APP_1 Lot=5
@@ -38,7 +37,6 @@ Usage:
 
 Options:
  -new-cname-mismatch   (filtre: New/Primaire cname != scan)
- -scan-mismatch        (filtre: ScanPath Primary = KO et ResolvedSCAN != ExpectedSCAN)
 """.encode("utf-8")
 
 # =================
@@ -214,27 +212,64 @@ def new_cname_mismatch(o):
     return c != s
 
 # ============================================================
-# NOUVEAU : ScanPath mismatch (ResolvedSCAN != ExpectedSCAN)
+# CONCLUSION (colonne summary : "ligne à ouvrir")
 # ============================================================
-def scanpath_mismatch(o):
+def conclusion_value(o):
+    """
+    Valeur ASCII (filtrable) :
+      - ERR
+      - SCAN_MISMATCH
+      - SCAN_KO
+      - SERVICE_KO
+      - SERVICE_WARN
+      - COH_KO
+      - OK
+      - N/A
+    """
     st = o.get("Status", {}) or {}
-    prim = st.get("ScanPath", {}).get("Primary", {}) or {}
 
-    if prim.get("Status") != "KO":
-        return False
+    if st.get("ErrorType"):
+        return "ERR"
 
-    r = prim.get("ResolvedSCAN")
-    e = prim.get("ExpectedSCAN")
-    if not r or not e:
-        return False
+    sp = (st.get("ScanPath", {}) or {}).get("Primary", {}) or {}
+    sv = (st.get("ServiceCheck", {}) or {}).get("Primary", {}) or {}
+    coh = st.get("Coherence", {}) or {}
 
-    try:
-        return ustr(r).strip().lower() != ustr(e).strip().lower()
-    except:
-        try:
-            return str(r).strip().lower() != str(e).strip().lower()
-        except:
-            return False
+    sp_s = sp.get("Status")
+    if sp_s == "KO":
+        msg = ustr(sp.get("Message", "")).lower()
+        if "does not match" in msg:
+            return "SCAN_MISMATCH"
+        return "SCAN_KO"
+    if sp_s != "OK":
+        # ScanPath N/A -> conclusion N/A
+        return "N/A"
+
+    # ScanPath OK => on regarde service / cohérence
+    sv_s = sv.get("Status")
+    if sv_s == "KO":
+        return "SERVICE_KO"
+
+    oc = sv.get("OracleCheck", {}) or {}
+    if oc.get("OracleStatus") == "WARN":
+        return "SERVICE_WARN"
+
+    if coh.get("GlobalOK") is False:
+        return "COH_KO"
+
+    return "OK"
+
+def conclusion_label(o):
+    v = conclusion_value(o)
+    if v == "OK":
+        return GREEN + u"OK" + RESET
+    if v == "N/A":
+        return YELLOW + u"N/A" + RESET
+    # tout le reste = à ouvrir
+    return RED + ustr(v) + RESET
+
+# On permet aussi de filtrer sur CONCLUSION
+FILTER_FIELDS["CONCLUSION"] = lambda o: conclusion_value(o)
 
 def pager_wait():
     sys.stdout.write("\n-- More -- (SPACE to continue, q to quit)")
@@ -270,6 +305,7 @@ def print_summary(objs):
         ("COH",5),
         ("ScanPath",10),
         ("Service",10),
+        ("CONCLUSION",12),
         ("Dirty",6),
     ]
 
@@ -299,12 +335,7 @@ def print_summary(objs):
         scanpath_p = st.get("ScanPath", {}).get("Primary", {}).get("Status")
         service_p  = st.get("ServiceCheck", {}).get("Primary", {}).get("Status")
 
-        # ScanPath display avec marqueur KO! si mismatch Resolved/Expected
-        if scanpath_p == "KO" and scanpath_mismatch(o):
-            scanpath_disp = RED + u"✗ KO!" + RESET
-        else:
-            scanpath_disp = format_status_flag(scanpath_p)
-
+        scanpath_disp = format_status_flag(scanpath_p)
         service_disp  = format_status_flag(service_p)
 
         cur_s, _ = compute_block_status(net.get("Current"))
@@ -330,6 +361,7 @@ def print_summary(objs):
             coherence_label(o),
             scanpath_disp,
             service_disp,
+            conclusion_label(o),
             color_dirty(st.get("Dirty")),
         ]
 
@@ -516,14 +548,14 @@ if __name__ == "__main__":
                 for k in sorted(FILTER_FIELDS.keys()):
                     print " ",k
                 print "  -new-cname-mismatch"
-                print "  -scan-mismatch"
                 sys.exit(0)
             if "=" in a:
                 k,v = a.split("=",1)
                 if v == "?":
                     vals = sorted(set(FILTER_FIELDS[k](o) for o in objs))
                     print "\nValeurs possibles pour",k,":"
-                    for x in vals: print " ",x
+                    for x in vals:
+                        print " ",x
                     sys.exit(0)
                 filters[k] = v
 
@@ -537,10 +569,6 @@ if __name__ == "__main__":
         # ✅ filtre ajouté (sans impact sur le reste)
         if "-new-cname-mismatch" in args:
             objs = [o for o in objs if new_cname_mismatch(o)]
-
-        # ✅ filtre mismatch Resolved/Expected SCAN
-        if "-scan-mismatch" in args:
-            objs = [o for o in objs if scanpath_mismatch(o)]
 
         print_summary(objs)
         sys.exit(0)
