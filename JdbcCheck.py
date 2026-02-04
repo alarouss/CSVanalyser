@@ -333,6 +333,48 @@ def check_oracle_service(addresses, service):
             ko(tag, "service %s not known by listener" % service)
 
         ok(tag, "service %s known by listener" % service)
+# ============================================================
+# ORACLE (BLOQUANT) — via SSH sur le serveur DB
+# ============================================================
+
+def check_oracle_service_ssh(addresses, service, ssh_user="oracle", timeout=10):
+    """
+    Execute lsnrctl on the remote DB servers via SSH
+    and check that SERVICE_NAME is known by the listener.
+    """
+
+    for a in addresses:
+        role = a["role"]
+        host = a["host"]
+        tag = "ORACLE][%s" % role
+
+        cmd = [
+            "ssh",
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=%d" % timeout,
+            "%s@%s" % (ssh_user, host),
+            "lsnrctl services"
+        ]
+
+        try:
+            p = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            outp, errp = p.communicate()
+        except Exception as e:
+            ko(tag, "SSH execution failed (%s)" % str(e))
+
+        if p.returncode != 0:
+            ko(tag, "SSH/lsnrctl failed: %s" % errp.strip())
+
+        txt = outp.decode("utf-8", "ignore").upper()
+
+        if service.upper() not in txt:
+            ko(tag, "service %s not registered in listener" % service)
+
+        ok(tag, "service %s known by listener" % service)
 
 # ============================================================
 # MAIN
@@ -357,6 +399,8 @@ def main():
     check_tcp(addresses)
 
     # ---- ORACLE (sans user/pass) ----
-    check_oracle_service(addresses, service)
+    #check_oracle_service(addresses, service)
+    # ---- ORACLE (via SSH on DB servers) ----
+    check_oracle_service_ssh(addresses, service)
 if __name__ == "__main__":
     main()
