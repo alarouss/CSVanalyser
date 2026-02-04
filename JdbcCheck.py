@@ -288,61 +288,14 @@ def check_tcp(addresses, timeout=3):
             except:
                 pass
 # ============================================================
-# ORACLE (BLOQUANT, sans user/pass)
-#   Vérifie que le listener connaît le SERVICE_NAME
-#   via: lsnrctl services
+# ORACLE (Option C)
+#   PRIMARY : bloquant
+#   DR      : WARNING si SSH indisponible
 # ============================================================
 
-def check_oracle_service(addresses, service):
-    """
-    For each address (PRIMARY/DR), check that the listener
-    knows SERVICE_NAME using `lsnrctl services`.
-    """
-    for a in addresses:
-        role = a["role"]
-        host = a["host"]
-        port = a["port"]
-        tag = "ORACLE][%s" % role
-
-        # Appel lsnrctl services (local)
-        try:
-            p = subprocess.Popen(
-                ["lsnrctl", "services"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            outp, errp = p.communicate()
-        except Exception as e:
-            ko(tag, "cannot execute lsnrctl (%s)" % str(e))
-
-        if p.returncode != 0:
-            ko(tag, "lsnrctl returned non-zero code")
-
-        txt = outp.decode("utf-8", "ignore")
-
-        # Vérifie présence du service
-        # (on accepte SERVICE_NAME ou SERVICE)
-        svc_ok = False
-        for line in txt.splitlines():
-            l = line.upper()
-            if service.upper() in l:
-                svc_ok = True
-                break
-
-        if not svc_ok:
-            ko(tag, "service %s not known by listener" % service)
-
-        ok(tag, "service %s known by listener" % service)
-# ============================================================
-# ORACLE (BLOQUANT) — via SSH sur le serveur DB
-# ============================================================
+import subprocess
 
 def check_oracle_service_ssh(addresses, service, ssh_user="oracle", timeout=10):
-    """
-    Execute lsnrctl on the remote DB servers via SSH
-    and check that SERVICE_NAME is known by the listener.
-    """
-
     for a in addresses:
         role = a["role"]
         host = a["host"]
@@ -364,17 +317,29 @@ def check_oracle_service_ssh(addresses, service, ssh_user="oracle", timeout=10):
             )
             outp, errp = p.communicate()
         except Exception as e:
-            ko(tag, "SSH execution failed (%s)" % str(e))
+            if role == "DR":
+                warn(tag, "SSH execution failed (%s) – listener check skipped" % str(e))
+                continue
+            else:
+                ko(tag, "SSH execution failed (%s)" % str(e))
 
         if p.returncode != 0:
-            ko(tag, "SSH/lsnrctl failed: %s" % errp.strip())
+            msg = errp.strip() or "lsnrctl execution failed"
+            if role == "DR":
+                warn(tag, "SSH/lsnrctl failed (%s) – listener check skipped" % msg)
+                continue
+            else:
+                ko(tag, "SSH/lsnrctl failed (%s)" % msg)
 
         txt = outp.decode("utf-8", "ignore").upper()
 
         if service.upper() not in txt:
-            ko(tag, "service %s not registered in listener" % service)
-
-        ok(tag, "service %s known by listener" % service)
+            if role == "DR":
+                warn(tag, "service %s not found in listener output" % service)
+            else:
+                ko(tag, "service %s not registered in listener" % service)
+        else:
+            ok(tag, "service %s known by listener" % service)
 
 # ============================================================
 # MAIN
