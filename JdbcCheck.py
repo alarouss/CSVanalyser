@@ -25,20 +25,22 @@ import re
 
 def out(msg):
     try:
-        sys.stdout.write(msg + "\n")
+        if isinstance(msg, unicode):
+            sys.stdout.write(msg.encode("utf-8") + "\n")
+        else:
+            sys.stdout.write(str(msg) + "\n")
     except:
         print msg
+
 def warn(tag, msg):
-    s = u"[{}] WARNING - {}".format(tag, msg)
-    try:
-        print(s.encode("utf-8"))
-    except:
-        print(str(s))
+    out("[{}] WARNING - {}".format(tag, msg))
+
 def ok(tag, msg):
-    out(u"[{}] OK - {}".format(tag, msg))
+    out("[{}] OK - {}".format(tag, msg))
 
 def ko(tag, msg):
-    out(u"[{}] KO - {}".format(tag, msg))
+    out("[{}] KO - {}".format(tag, msg))
+    sys.exit(1)
 
 
 # ============================================================
