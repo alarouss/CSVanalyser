@@ -288,7 +288,7 @@ def check_tcp(addresses, timeout=3):
             except:
                 pass
 # ============================================================
-# ORACLE (Option C)
+# ORACLE (Option C + SCAN + PATH Oracle)
 #   PRIMARY : bloquant
 #   DR      : WARNING si SSH indisponible
 # ============================================================
@@ -301,12 +301,18 @@ def check_oracle_service_ssh(addresses, service, ssh_user="oracle", timeout=10):
         host = a["host"]
         tag = "ORACLE][%s" % role
 
+        remote_cmd = (
+            "source ~/.bash_profile >/dev/null 2>&1 && "
+            "lsnrctl services"
+        )
+
         cmd = [
             "ssh",
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=%d" % timeout,
+            "-o", "CheckHostIP=no",
             "%s@%s" % (ssh_user, host),
-            "lsnrctl services"
+            remote_cmd
         ]
 
         try:
@@ -324,7 +330,7 @@ def check_oracle_service_ssh(addresses, service, ssh_user="oracle", timeout=10):
                 ko(tag, "SSH execution failed (%s)" % str(e))
 
         if p.returncode != 0:
-            msg = errp.strip() or "lsnrctl execution failed"
+            msg = (errp or "").strip() or "lsnrctl execution failed"
             if role == "DR":
                 warn(tag, "SSH/lsnrctl failed (%s) – listener check skipped" % msg)
                 continue
