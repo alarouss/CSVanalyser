@@ -28,10 +28,12 @@ def out(msg):
         sys.stdout.write(msg + "\n")
     except:
         print msg
-
 def warn(tag, msg):
-    out(u"[{}] WARNING - {}".format(tag, msg))
-
+    s = u"[{}] WARNING - {}".format(tag, msg)
+    try:
+        print(s.encode("utf-8"))
+    except:
+        print(str(s))
 def ok(tag, msg):
     out(u"[{}] OK - {}".format(tag, msg))
 
