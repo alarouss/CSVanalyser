@@ -151,6 +151,11 @@ def check_structure(jdbc):
     tag = "STRUCTURE"
 
     blocks = extract_blocks(jdbc, "(address=")
+    out("[DEBUG] ADDRESS blocks found: %d" % len(blocks))
+    if blocks:
+        out("[DEBUG] FIRST ADDRESS BLOCK = %s" % blocks[0])
+    
+    
     if not blocks:
         ko(tag, "no ADDRESS found")
 
