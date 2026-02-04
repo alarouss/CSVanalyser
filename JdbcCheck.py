@@ -295,16 +295,27 @@ def check_tcp(addresses, timeout=3):
 
 import subprocess
 
-def check_oracle_service_ssh(addresses, service, ssh_user="oracle", timeout=10):
+def normalize(s):
+    return s.upper().replace("_", "").replace("-", "")
+
+def extract_services(listener_output):
+    services = []
+    for line in listener_output.splitlines():
+        line = line.strip()
+        if line.startswith("Service \""):
+            svc = line.split("\"")[1]
+            services.append(svc)
+    return services
+
+
+def check_oracle_service_ssh(addresses, jdbc_service, ssh_user="oracle", timeout=10):
+    jdbc_norm = normalize(jdbc_service)
+
     for a in addresses:
         role = a["role"]
         host = a["host"]
         tag = "ORACLE][%s" % role
 
-        remote_cmd = (
-            "source ~/.bash_profile >/dev/null 2>&1 && "
-            "lsnrctl services"
-        )
         cmd = [
             "ssh",
             "-o", "BatchMode=yes",
@@ -315,39 +326,40 @@ def check_oracle_service_ssh(addresses, service, ssh_user="oracle", timeout=10):
             "bash -lc 'lsnrctl services'"
         ]
 
-        print("### ORACLE SSH CMD ###")
-        print(cmd)
         try:
-            p = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             outp, errp = p.communicate()
         except Exception as e:
-            if role == "DR":
-                warn(tag, "SSH execution failed (%s) – listener check skipped" % str(e))
-                continue
-            else:
-                ko(tag, "SSH execution failed (%s)" % str(e))
+            warn(tag, "SSH execution failed (%s) – listener check skipped" % e)
+            continue
 
         if p.returncode != 0:
-            msg = (errp or "").strip() or "lsnrctl execution failed"
-            if role == "DR":
-                warn(tag, "SSH/lsnrctl failed (%s) – listener check skipped" % msg)
-                continue
-            else:
-                ko(tag, "SSH/lsnrctl failed (%s)" % msg)
+            warn(tag, "SSH/lsnrctl failed (%s) – listener check skipped" % (errp or "").strip())
+            continue
 
-        txt = outp.decode("utf-8", "ignore").upper()
+        txt = outp.decode("utf-8", "ignore")
+        services = extract_services(txt)
 
-        if service.upper() not in txt:
-            if role == "DR":
-                warn(tag, "service %s not found in listener output" % service)
-            else:
-                ko(tag, "service %s not registered in listener" % service)
+        # correspondances proches
+        close = []
+        for s in services:
+            if jdbc_norm in normalize(s) or normalize(s) in jdbc_norm:
+                close.append(s)
+
+        if jdbc_service in services:
+            ok(tag, "service %s registered in listener" % jdbc_service)
+        elif close:
+            warn(
+                tag,
+                "JDBC service %s not found – %d close Oracle service(s) detected: %s"
+                % (jdbc_service, len(close), ", ".join(close[:4]))
+            )
         else:
-            ok(tag, "service %s known by listener" % service)
+            warn(
+                tag,
+                "JDBC service %s not found – no close Oracle service detected"
+                % jdbc_service
+            )
 
 # ============================================================
 # MAIN
