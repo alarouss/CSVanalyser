@@ -306,15 +306,15 @@ def check_oracle_service_ssh(addresses, service, ssh_user="oracle", timeout=10):
             "lsnrctl services"
         )
 
+       
         cmd = [
             "ssh",
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=%d" % timeout,
             "-o", "CheckHostIP=no",
             "%s@%s" % (ssh_user, host),
-            remote_cmd
+            "bash", "-lc", "lsnrctl services"
         ]
-
         try:
             p = subprocess.Popen(
                 cmd,
