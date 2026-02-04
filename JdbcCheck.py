@@ -315,6 +315,8 @@ def check_oracle_service_ssh(addresses, service, ssh_user="oracle", timeout=10):
             "%s@%s" % (ssh_user, host),
             "bash", "-lc", "lsnrctl services"
         ]
+        print("### ORACLE SSH CMD ###")
+        print(cmd)
         try:
             p = subprocess.Popen(
                 cmd,
