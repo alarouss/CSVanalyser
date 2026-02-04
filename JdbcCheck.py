@@ -33,13 +33,13 @@ def out(msg):
         print msg
 
 def warn(tag, msg):
-    out("[{}] WARNING - {}".format(tag, msg))
+    out("[{0}] WARNING - {1}".format(tag, msg))
 
 def ok(tag, msg):
-    out("[{}] OK - {}".format(tag, msg))
+    out("[{0}] OK - {1}".format(tag, msg))
 
 def ko(tag, msg):
-    out("[{}] KO - {}".format(tag, msg))
+    out("[{0}] KO - {1}".format(tag, msg))
     sys.exit(1)
 
 
