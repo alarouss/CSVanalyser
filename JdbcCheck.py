@@ -7,7 +7,8 @@
 #   SYNTAX     : validation JDBC (bloquante)
 #   STRUCTURE  : extraction ADDRESS / SERVICE (bloquante)
 #   COHERENCE  : règles métier (WARNING uniquement)
-#   DNS        : résolution DNS/SCAN (bloquante par hôte)
+#   DNS        : résolution DNS/SCAN (bloquante)
+#   TCP        : connectivité host:port (bloquante)
 #
 # Python 2.6 compatible
 
@@ -171,7 +172,7 @@ def check_structure(jdbc):
         addresses.append({
             "role": role,
             "host": host,
-            "port": port,
+            "port": int(port),
             "protocol": proto
         })
 
@@ -240,7 +241,7 @@ def check_coherence(addresses, service, dbname):
         ok("COHERENCE][HOST↔SERVICE", "consistent naming")
 
 # ============================================================
-# DNS (BLOQUANT)
+# DNS
 # ============================================================
 
 def check_dns(addresses):
@@ -259,6 +260,30 @@ def check_dns(addresses):
             ok(tag, "%s resolves to %d IP(s)" % (host, len(ips)))
         except Exception as e:
             ko(tag, "DNS resolution failed for %s (%s)" % (host, str(e)))
+
+# ============================================================
+# TCP (BLOQUANT)
+# ============================================================
+
+def check_tcp(addresses, timeout=3):
+    for a in addresses:
+        role = a["role"]
+        host = a["host"]
+        port = a["port"]
+        tag = "TCP][%s" % role
+
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        try:
+            s.connect((host, port))
+            ok(tag, "connection to %s:%d succeeded" % (host, port))
+        except Exception as e:
+            ko(tag, "cannot connect to %s:%d (%s)" % (host, port, str(e)))
+        finally:
+            try:
+                s.close()
+            except:
+                pass
 
 # ============================================================
 # MAIN
@@ -280,6 +305,7 @@ def main():
     addresses, service = check_structure(jdbc)
     check_coherence(addresses, service, dbname)
     check_dns(addresses)
+    check_tcp(addresses)
 
 if __name__ == "__main__":
     main()
