@@ -22,26 +22,75 @@ import re
 # ============================================================
 # OUTPUT
 # ============================================================
+# ============================================================
+# OUTPUT (PATCH MINIMAL – STRUCTURATION VISUELLE UNIQUEMENT)
+# ============================================================
+
+_CURRENT_SECTION = None
+_CURRENT_SUB     = None
+
+def _print(line):
+    try:
+        if isinstance(line, unicode):
+            sys.stdout.write(line.encode("utf-8") + "\n")
+        else:
+            sys.stdout.write(str(line) + "\n")
+    except:
+        print line
+
+def _split_tag(tag):
+    """
+    INPUT
+    STRUCTURE][PRIMARY
+    ORACLE][DR
+    """
+    if "][" in tag:
+        a, b = tag.split("][", 1)
+        return a, b
+    return tag, None
+
+def _ensure_section(sec):
+    global _CURRENT_SECTION
+    if sec != _CURRENT_SECTION:
+        _print("\n[%s]" % sec)
+        _CURRENT_SECTION = sec
+
+def _ensure_sub(sub):
+    global _CURRENT_SUB
+    if sub != _CURRENT_SUB:
+        _print("  [%s]" % sub)
+        _CURRENT_SUB = sub
 
 def out(msg):
-    try:
-        if isinstance(msg, unicode):
-            sys.stdout.write(msg.encode("utf-8") + "\n")
-        else:
-            sys.stdout.write(str(msg) + "\n")
-    except:
-        print msg
+    _print(msg)
 
 def ok(tag, msg):
-    out("[{0}] OK - {1}".format(tag, msg))
+    sec, sub = _split_tag(tag)
+    _ensure_section(sec)
+    if sub:
+        _ensure_sub(sub)
+        _print("    ✔ " + msg)
+    else:
+        _print("  ✔ " + msg)
+
 def warn(tag, msg):
-    out("[{0}] WARNING - {1}".format(tag, msg))
+    sec, sub = _split_tag(tag)
+    _ensure_section(sec)
+    if sub:
+        _ensure_sub(sub)
+        _print("    ⚠ " + msg)
+    else:
+        _print("  ⚠ " + msg)
 
 def ko(tag, msg):
-    out("[{0}] KO - {1}".format(tag, msg))
+    sec, sub = _split_tag(tag)
+    _ensure_section(sec)
+    if sub:
+        _ensure_sub(sub)
+        _print("    ✖ " + msg)
+    else:
+        _print("  ✖ " + msg)
     sys.exit(1)
-
-
 
 # ============================================================
 # INPUT
