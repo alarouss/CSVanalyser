@@ -192,6 +192,72 @@ def validate_sqlnet_with_tnsping(jdbc, alias="JDBCCHECK"):
 # ============================================================
 # SYNTAX — STRICT SQLNET
 # ============================================================
+def validate_sqlnet_with_tnsping(jdbc, alias="JDBCCHECK"):
+    tag = "SYNTAX"
+
+    # Récupère le DESCRIPTOR après @
+    if "@" not in jdbc:
+        ko(tag, "missing descriptor after @")
+
+    desc = jdbc.split("@", 1)[1].strip()
+
+    # Prépare un TNS_ADMIN temporaire
+    tmpdir = "/tmp/jdbccheck_%d" % os.getpid()
+    if not os.path.isdir(tmpdir):
+        try:
+            os.makedirs(tmpdir)
+        except Exception as e:
+            ko(tag, "cannot create temp TNS_ADMIN (%s)" % e)
+
+    sqlnet = os.path.join(tmpdir, "sqlnet.ora")
+    tns     = os.path.join(tmpdir, "tnsnames.ora")
+
+    try:
+        f = open(sqlnet, "w")
+        f.write("NAMES.DIRECTORY_PATH=(TNSNAMES)\n")
+        f.close()
+
+        f = open(tns, "w")
+        f.write("%s=%s\n" % (alias, desc))
+        f.close()
+    except Exception as e:
+        ko(tag, "cannot write TNS files (%s)" % e)
+
+    env = os.environ.copy()
+    env["TNS_ADMIN"] = tmpdir
+
+    cmd = ["tnsping", alias, "1"]
+
+    try:
+        p = subprocess.Popen(cmd,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE,
+                             env=env)
+        outp, errp = p.communicate()
+    except Exception as e:
+        ko(tag, "tnsping execution failed (%s)" % e)
+
+    output = ((outp or "") + "\n" + (errp or "")).upper()
+
+    # --- DÉCISION ORACLE NET ---
+
+    # ❌ Syntaxe sqlnet invalide → BLOQUANT
+    if ("TNS-12533" in output or
+        "ILLEGAL ADDRESS" in output or
+        "TNS-12560" in output or
+        "PROTOCOL ADAPTER ERROR" in output):
+        ko(tag, "invalid sqlnet syntax (Oracle Net parser)")
+
+    # ⚠ Syntaxe OK mais réseau / listener KO → NON BLOQUANT
+    if ("TNS-12541" in output or
+        "NO LISTENER" in output or
+        "TNS-12514" in output or
+        "LISTENER DOES NOT CURRENTLY KNOW" in output):
+        warn(tag, "sqlnet syntax OK (Oracle Net), listener/network not reachable")
+        return
+
+    # ✅ Tout est OK
+    ok(tag, "sqlnet syntax validated by Oracle Net (tnsping)")
 
 def check_syntax(jdbc):
     tag = "SYNTAX"
@@ -256,6 +322,8 @@ def check_syntax(jdbc):
         ko(tag, "missing SERVICE_NAME")
 
     ok(tag, "sqlnet syntax validated (strict)")
+    # 8️⃣ Validation Oracle Net réelle (non bloquante réseau)
+    validate_sqlnet_with_tnsping(jdbc)
 
 # ============================================================
 # STRUCTURE
