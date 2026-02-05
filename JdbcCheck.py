@@ -20,27 +20,20 @@ import re
 
 
 # ============================================================
-# OUTPUT (PATCH MINIMAL – UNICODE SAFE, ALIGNÉ REPORTV3)
+# OUTPUT – FIX COULEURS (STYLE REPORTV3)
 # ============================================================
+
+RED    = "\033[31m"
+GREEN  = "\033[32m"
+YELLOW = "\033[33m"
+RESET  = "\033[0m"
 
 _CURRENT_SECTION = None
 _CURRENT_SUB     = None
 
-def u(x):
-    if isinstance(x, unicode):
-        return x
-    try:
-        return unicode(x, "utf-8", "ignore")
-    except:
-        return unicode(str(x), "ascii", "ignore")
-
 def _print(line):
-    try:
-        # EXACTEMENT comme ReportV3
-        print u(line)
-    except:
-        print line
-
+    # IMPORTANT : écrire du str, pas du unicode
+    sys.stdout.write(line + "\n")
 
 def _split_tag(tag):
     if "][" in tag:
@@ -51,48 +44,48 @@ def _split_tag(tag):
 def _ensure_section(sec):
     global _CURRENT_SECTION, _CURRENT_SUB
     if sec != _CURRENT_SECTION:
-        _print(u("\n[{0}]").format(sec))
+        _print("\n[%s]" % sec)
         _CURRENT_SECTION = sec
         _CURRENT_SUB = None
 
 def _ensure_sub(sub):
     global _CURRENT_SUB
     if sub != _CURRENT_SUB:
-        _print(u("  [{0}]").format(sub))
+        _print("  [%s]" % sub)
         _CURRENT_SUB = sub
-
-def out(msg):
-    _print(msg)
 
 def ok(tag, msg):
     sec, sub = _split_tag(tag)
     _ensure_section(sec)
-    icon = u("✔")
+    prefix = GREEN + "[OK]" + RESET
+    line = "%s %s" % (prefix, msg)
     if sub:
         _ensure_sub(sub)
-        _print(u("    {0} {1}").format(icon, u(msg)))
+        _print("    " + line)
     else:
-        _print(u("  {0} {1}").format(icon, u(msg)))
+        _print("  " + line)
 
 def warn(tag, msg):
     sec, sub = _split_tag(tag)
     _ensure_section(sec)
-    icon = u("⚠")
+    prefix = YELLOW + "[WARN]" + RESET
+    line = "%s %s" % (prefix, msg)
     if sub:
         _ensure_sub(sub)
-        _print(u("    {0} {1}").format(icon, u(msg)))
+        _print("    " + line)
     else:
-        _print(u("  {0} {1}").format(icon, u(msg)))
+        _print("  " + line)
 
 def ko(tag, msg):
     sec, sub = _split_tag(tag)
     _ensure_section(sec)
-    icon = u("✖")
+    prefix = RED + "[KO]" + RESET
+    line = "%s %s" % (prefix, msg)
     if sub:
         _ensure_sub(sub)
-        _print(u("    {0} {1}").format(icon, u(msg)))
+        _print("    " + line)
     else:
-        _print(u("  {0} {1}").format(icon, u(msg)))
+        _print("  " + line)
     sys.exit(1)
 
 # ============================================================
