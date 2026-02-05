@@ -130,6 +130,64 @@ def read_jdbc_from_ini(path):
     ok("INPUT", "JDBC string loaded from %s (length=%d)" % (path, len(jdbc)))
     return jdbc
 
+#=============================================================
+def _get_descriptor_after_at(jdbc):
+    # jdbc:oracle:thin:@<DESCRIPTOR>
+    if "@" not in jdbc:
+        return None
+    return jdbc.split("@", 1)[1].strip()
+
+def validate_sqlnet_with_tnsping(jdbc, alias="JDBCCHECK"):
+    tag = "SYNTAX"
+
+    desc = _get_descriptor_after_at(jdbc)
+    if not desc:
+        ko(tag, "missing descriptor after @")
+
+    # Crée un TNS_ADMIN temporaire
+    tmpdir = "/tmp/jdbccheck_%d" % os.getpid()
+    try:
+        if not os.path.isdir(tmpdir):
+            os.makedirs(tmpdir)
+    except Exception as e:
+        ko(tag, "cannot create temp dir %s (%s)" % (tmpdir, str(e)))
+
+    # Force TNSNAMES uniquement (évite LDAP/EZCONNECT)
+    sqlnet_path = os.path.join(tmpdir, "sqlnet.ora")
+    tns_path    = os.path.join(tmpdir, "tnsnames.ora")
+
+    try:
+        f = open(sqlnet_path, "w")
+        f.write("NAMES.DIRECTORY_PATH=(TNSNAMES)\n")
+        f.close()
+
+        f = open(tns_path, "w")
+        # alias = (DESCRIPTION=...)
+        f.write("%s=%s\n" % (alias, desc))
+        f.close()
+    except Exception as e:
+        ko(tag, "cannot write temp tns files (%s)" % str(e))
+
+    # Exécute tnsping avec TNS_ADMIN=tmpdir
+    env = os.environ.copy()
+    env["TNS_ADMIN"] = tmpdir
+
+    cmd = ["tnsping", alias, "1"]
+    try:
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+        outp, errp = p.communicate()
+    except OSError as e:
+        ko(tag, "tnsping not available (%s)" % str(e))
+    except Exception as e:
+        ko(tag, "tnsping execution failed (%s)" % str(e))
+
+    output = (outp or "") + "\n" + (errp or "")
+    if p.returncode != 0:
+        # On remonte le message Oracle Net, tronqué pour rester lisible
+        msg = "tnsping failed (Oracle Net parse/connect). Extract:\n" + "\n".join(output.splitlines()[-12:])
+        ko(tag, msg)
+
+    ok(tag, "tnsping OK – Oracle Net descriptor parsed successfully")
 
 # ============================================================
 # SYNTAX — STRICT SQLNET
