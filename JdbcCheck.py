@@ -363,6 +363,23 @@ def extract_services(listener_output):
             services.append(svc)
     return services
 
+def srvctl_service_exists(host, dbname, service, ssh_user="oracle", timeout=10):
+    cmd = [
+        "ssh",
+        "-o", "BatchMode=yes",
+        "-o", "ConnectTimeout=%d" % timeout,
+        "%s@%s" % (ssh_user, host),
+        "bash -lc 'srvctl config service -db %s 2>/dev/null'"
+        % dbname
+    ]
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    outp, errp = p.communicate()
+
+    if p.returncode != 0:
+        return False
+
+    return service in outp
+
 
 def check_oracle_service_ssh(addresses, jdbc_service, ssh_user="oracle", timeout=10):
     jdbc_norm = normalize(jdbc_service)
@@ -402,19 +419,26 @@ def check_oracle_service_ssh(addresses, jdbc_service, ssh_user="oracle", timeout
             if jdbc_norm in normalize(s) or normalize(s) in jdbc_norm:
                 close.append(s)
 
+        # ÉTAPE 1 — listener (prioritaire)
         if jdbc_service in services:
-            ok(tag, "service %s registered in listener" % jdbc_service)
-        elif close:
+            ok(tag, "service %s visible in listener (started)" % jdbc_service)
+            continue
+        
+        # ÉTAPE 2 — srvctl (existence)
+        dbname = jdbc_service.split("_")[-1]  # M19GAWP0
+        exists = srvctl_service_exists(host, dbname, jdbc_service)
+        
+        if exists:
             warn(
                 tag,
-                u("JDBC service %s not found - %d close Oracle service(s) detected: %s")
-                % (u(jdbc_service), len(close), u(", ".join(close[:4])))
+                "service %s exists (srvctl) but is not started "
+                "(not visible in listener)"
+                % jdbc_service
             )
-
         else:
             warn(
                 tag,
-                "JDBC service %s not found – no close Oracle service detected"
+                "service %s does not exist (srvctl config service)"
                 % jdbc_service
             )
 
