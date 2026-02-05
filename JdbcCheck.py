@@ -130,19 +130,23 @@ def read_jdbc_from_ini(path):
     ok("INPUT", "JDBC string loaded from %s (length=%d)" % (path, len(jdbc)))
     return jdbc
 
+
 # ============================================================
-# SYNTAX
+# SYNTAX — STRICT SQLNET
 # ============================================================
 
 def check_syntax(jdbc):
     tag = "SYNTAX"
+    s = jdbc.strip()
 
-    if not jdbc.lower().startswith("jdbc:oracle:thin:@"):
+    # 1️⃣ Préfixe JDBC
+    if not s.lower().startswith("jdbc:oracle:thin:@"):
         ko(tag, "invalid JDBC prefix")
     ok(tag, "prefix valid")
 
+    # 2️⃣ Parenthèses équilibrées
     level = 0
-    for i, ch in enumerate(jdbc):
+    for i, ch in enumerate(s):
         if ch == "(":
             level += 1
         elif ch == ")":
@@ -153,10 +157,47 @@ def check_syntax(jdbc):
         ko(tag, "parentheses mismatch (unbalanced)")
     ok(tag, "parentheses balanced")
 
-    for k in ["(description=", "(address", "(connect_data=", "(service_name="]:
-        if k not in jdbc.lower():
-            ko(tag, "missing mandatory block %s" % k.upper())
-    ok(tag, "mandatory blocks detected")
+    # On ne garde que la partie DESCRIPTOR
+    try:
+        desc = s.split("@", 1)[1]
+    except:
+        ko(tag, "missing descriptor after @")
+
+    # 3️⃣ Interdiction des formes (KEY VALUE)
+    bad_kv = re.search(r"\([A-Z_]+\s+[^)=]+\)", desc, re.I)
+    if bad_kv:
+        ko(tag, "invalid sqlnet syntax (KEY VALUE instead of KEY=VALUE)")
+
+    # 4️⃣ Toute clé DOIT être suivie de '='
+    bad_eq = re.search(r"\([A-Z_]+(?=\))", desc, re.I)
+    if bad_eq:
+        ko(tag, "invalid sqlnet syntax (missing '=')")
+
+    # 5️⃣ Validation stricte ADDRESS
+    addr_pattern = re.compile(
+        r"\(ADDRESS=\s*"
+        r"(\(PROTOCOL=[^)]+\))"
+        r"(\(HOST=[^)]+\))"
+        r"(\(PORT=[0-9]+\))"
+        r"\s*\)",
+        re.I
+    )
+
+    addresses = addr_pattern.findall(desc)
+    if not addresses:
+        ko(tag, "no valid ADDRESS block found (sqlnet strict)")
+
+    ok(tag, "%d valid ADDRESS block(s) detected" % len(addresses))
+
+    # 6️⃣ CONNECT_DATA obligatoire
+    if "(CONNECT_DATA=" not in desc.upper():
+        ko(tag, "missing CONNECT_DATA block")
+
+    # 7️⃣ SERVICE_NAME obligatoire
+    if "(SERVICE_NAME=" not in desc.upper():
+        ko(tag, "missing SERVICE_NAME")
+
+    ok(tag, "sqlnet syntax validated (strict)")
 
 # ============================================================
 # STRUCTURE
