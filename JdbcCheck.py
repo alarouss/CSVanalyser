@@ -36,9 +36,11 @@ def u(x):
 
 def _print(line):
     try:
-        sys.stdout.write(u(line).encode("utf-8") + "\n")
+        # EXACTEMENT comme ReportV3
+        print u(line)
     except:
         print line
+
 
 def _split_tag(tag):
     if "][" in tag:
