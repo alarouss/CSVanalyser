@@ -28,13 +28,21 @@ def oem_get_host_and_port(oem_conn, target_name):
     sql.append("define TNAME='%s'" % target_name.replace("'", "''"))
 
     sql.append("""
-select A.HOST_NAME||'|'||F.property_value
-from SYSMAN.MGMT$DB_DBNINSTANCEINFO A,
-     SYSMAN.MGMT$TARGET_PROPERTIES F
-where A.TARGET_NAME='&&TNAME'
-  and F.TARGET_GUID = A.TARGET_GUID
-  and F.property_name = 'Port';
+select
+  tp_host.property_value || '|' || tp_port.property_value
+from
+  sysman.mgmt$target t
+  join sysman.mgmt$target_properties tp_host
+       on tp_host.target_guid = t.target_guid
+      and tp_host.property_name = 'Host'
+  left join sysman.mgmt$target_properties tp_port
+       on tp_port.target_guid = t.target_guid
+      and tp_port.property_name = 'Port'
+where
+  t.target_name = '&&TNAME'
+  and t.target_type in ('oracle_database', 'oracle_dataguard')
 """.strip())
+
 
     sql.append("exit")
 
