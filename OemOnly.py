@@ -8,6 +8,7 @@ import time
 
 from Lib.io_common import load_main_conf
 from Lib.oem_flow import oem_get_host_and_port
+from Lib.oem_flow import oem_get_oracle_version
 from Lib.analyse_builder_v3 import compute_net_side
 
 # ------------------------------------------------
@@ -49,7 +50,8 @@ if __name__ == "__main__":
                 "host": None,
                 "port": None,
                 "cname": None,
-                "scan": None
+                "scan": None,
+                "oracle_version": None
             }
         },
         "Status": {
@@ -70,9 +72,13 @@ if __name__ == "__main__":
         print(json.dumps(result, indent=2))
         sys.exit(0)
 
+    host, port, e, d = oem_get_host_and_port(oem_conn, db_name)
     result["OEM"]["Primaire"]["host"] = host
-    result["OEM"]["Primaire"]["oracle_version"] = ora_version
+    result["OEM"]["Primaire"]["port"] = port
 
+    ora_version, e2, d2 = oem_get_oracle_version(oem_conn, db_name)
+    if not e2:
+        result["OEM"]["Primaire"]["oracle_version"] = ora_version
     # ------------------------------------------------
     # 2) Résolution réseau (CNAME + SCAN)
     # ------------------------------------------------
