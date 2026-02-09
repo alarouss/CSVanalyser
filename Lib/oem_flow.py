@@ -29,19 +29,25 @@ def oem_get_host_and_port(oem_conn, target_name):
 
     sql.append("""
 select
-  tp_host.property_value || '|' || tp_port.property_value
+  max(case
+        when lower(tp.property_name) like '%host%'
+          or lower(tp.property_name) like '%machine%'
+        then tp.property_value
+      end)
+  || '|' ||
+  max(case
+        when lower(tp.property_name) like '%oracle%version%'
+          or lower(tp.property_name) = 'version'
+        then tp.property_value
+      end)
 from
   sysman.mgmt$target t
-  join sysman.mgmt$target_properties tp_host
-       on tp_host.target_guid = t.target_guid
-      and tp_host.property_name = 'Host'
-  left join sysman.mgmt$target_properties tp_port
-       on tp_port.target_guid = t.target_guid
-      and tp_port.property_name = 'Port'
+  join sysman.mgmt$target_properties tp
+    on tp.target_guid = t.target_guid
 where
   t.target_name = '&&TNAME'
-  and t.target_type in ('oracle_database', 'oracle_dataguard')
 """.strip())
+
 
 
     sql.append("exit")
