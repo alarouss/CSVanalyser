@@ -10,7 +10,6 @@
 # - OEM access will be plugged later
 
 from Lib.database_arc import DatabaseArchitecture
-from Lib.oem_flow import oem_get_database_identity
 from Lib.oem_flow import oem_list_instances
 
 
@@ -53,13 +52,35 @@ class DatabaseArcFromOEM(object):
     # ------------------------------------------------------------
     # Internal steps (stubs for now)
     # ------------------------------------------------------------
-
     def _resolve_database(self, identity):
         """
-        Resolve identity to a database anchor.
-        To be implemented with OEM.
+        Resolve identifier to database anchor.
+        OEM implementation will be plugged later.
         """
-        raise NotImplementedError("_resolve_database not implemented")
+
+        # Lazy import to avoid hard dependency during tests
+        try:
+            from Lib import oem_flow
+        except ImportError:
+            raise Exception("oem_flow module not available")
+
+        if not hasattr(oem_flow, "oem_get_database_identity"):
+            raise Exception(
+                "oem_get_database_identity not implemented in oem_flow.py"
+            )
+
+        info = oem_flow.oem_get_database_identity(self.oem_conn, identity)
+
+        if not info:
+            raise Exception(
+                "Unable to resolve database identity for '%s'" % identity
+            )
+
+        return {
+            "db_name": info.get("db_name"),
+            "db_unique_name": info.get("db_unique_name"),
+            "role": info.get("role")
+        }
 
     def _populate_instances(self, db_info):
         """
