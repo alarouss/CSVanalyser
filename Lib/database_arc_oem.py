@@ -11,6 +11,8 @@
 
 from Lib.database_arc import DatabaseArchitecture
 from Lib.oem_flow import oem_get_database_identity
+from Lib.oem_flow import oem_list_instances
+
 
 
 class DatabaseArcFromOEM(object):
@@ -117,3 +119,24 @@ class DatabaseArcFromOEM(object):
             "db_unique_name": db_unique_name,
             "role": role
         }
+    def _populate_instances(self, db_info):
+        """
+        Populate instances[]:
+          - instance_name
+          - host
+          - cname
+          - version
+        """
+        db_unique_name = db_info.get("db_unique_name")
+
+        instances = oem_list_instances(self.oem_conn, db_unique_name)
+        if not instances:
+            return
+
+        for inst in instances:
+            self.arc.add_instance(
+                instance_name=inst.get("instance_name"),
+                host=inst.get("host"),
+                cname=inst.get("cname"),
+                version=inst.get("version")
+            )
