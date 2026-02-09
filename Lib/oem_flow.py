@@ -32,11 +32,26 @@ def oem_get_host_and_port(oem_conn, target_name):
 select
   nvl(
     max(case
-          when lower(tp.property_name) like '%host%'
-            or lower(tp.property_name) like '%machine%'
+          -- 1) Hostname physique (priorité)
+          when lower(tp.property_name) in ('hostname', 'host_name', 'server', 'machine_name')
           then tp.property_value
         end),
-    'UNKNOWN_HOST'
+    nvl(
+      max(case
+            -- 2) CNAME (souvent bon)
+            when lower(tp.property_name) like '%cname%'
+            then tp.property_value
+          end),
+      nvl(
+        max(case
+              -- 3) Host générique (souvent VIP)
+              when lower(tp.property_name) like '%host%'
+                or lower(tp.property_name) like '%machine%'
+              then tp.property_value
+            end),
+        'UNKNOWN_HOST'
+      )
+    )
   )
   || '|' ||
   nvl(
@@ -54,6 +69,7 @@ from
 where
   t.target_name = '&&TNAME';
 """.strip())
+
 
 
     sql.append("exit")
