@@ -106,7 +106,7 @@ where
         return h, v, None, None
 
     except Exception as ex:
-        return None, None, "OEM_EXCEPTION", str(ex
+        return None, None, "OEM_EXCEPTION", str(ex)
 
 def oem_get_oracle_version(oem_conn, target_name):
     """
