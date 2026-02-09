@@ -31,27 +31,8 @@ def oem_get_host_and_port(oem_conn, target_name):
     sql.append("""
 select
   nvl(
-    max(case
-          -- 1) Hostname physique (priorité)
-          when lower(tp.property_name) in ('hostname', 'host_name', 'server', 'machine_name')
-          then tp.property_value
-        end),
-    nvl(
-      max(case
-            -- 2) CNAME (souvent bon)
-            when lower(tp.property_name) like '%cname%'
-            then tp.property_value
-          end),
-      nvl(
-        max(case
-              -- 3) Host générique (souvent VIP)
-              when lower(tp.property_name) like '%host%'
-                or lower(tp.property_name) like '%machine%'
-              then tp.property_value
-            end),
-        'UNKNOWN_HOST'
-      )
-    )
+    max(h.target_name),
+    'UNKNOWN_HOST'
   )
   || '|' ||
   nvl(
@@ -63,11 +44,15 @@ select
     'UNKNOWN_PORT'
   )
 from
-  sysman.mgmt$target t
-  join sysman.mgmt$target_properties tp
-    on tp.target_guid = t.target_guid
+  sysman.mgmt$target d
+  join sysman.mgmt$target h
+    on h.target_type = 'host'
+   and h.target_name = d.host_name
+  left join sysman.mgmt$target_properties tp
+    on tp.target_guid = d.target_guid
 where
-  t.target_name = '&&TNAME';
+  d.target_type = 'oracle_database'
+  and d.target_name = '&&TNAME';
 """.strip())
 
 
