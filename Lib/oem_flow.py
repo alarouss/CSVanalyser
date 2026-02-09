@@ -9,6 +9,7 @@ import subprocess
 def oem_get_host_and_port(oem_conn, target_name):
     """
     Retourne (host, port, err_type, err_detail)
+    NB: le champ 'port' transporte désormais la VERSION ORACLE
     """
 
     if not oem_conn:
@@ -29,26 +30,30 @@ def oem_get_host_and_port(oem_conn, target_name):
 
     sql.append("""
 select
-  max(case
-        when lower(tp.property_name) like '%host%'
-          or lower(tp.property_name) like '%machine%'
-        then tp.property_value
-      end)
+  nvl(
+    max(case
+          when lower(tp.property_name) like '%host%'
+            or lower(tp.property_name) like '%machine%'
+          then tp.property_value
+        end),
+    'UNKNOWN_HOST'
+  )
   || '|' ||
-  max(case
-        when lower(tp.property_name) like '%oracle%version%'
-          or lower(tp.property_name) = 'version'
-        then tp.property_value
-      end)
+  nvl(
+    max(case
+          when lower(tp.property_name) like '%oracle%version%'
+            or lower(tp.property_name) = 'version'
+          then tp.property_value
+        end),
+    'UNKNOWN_VERSION'
+  )
 from
   sysman.mgmt$target t
   join sysman.mgmt$target_properties tp
     on tp.target_guid = t.target_guid
 where
-  t.target_name = '&&TNAME'
+  t.target_name = '&&TNAME';
 """.strip())
-
-
 
     sql.append("exit")
 
@@ -85,17 +90,19 @@ where
             return None, None, "OEM_NO_RESULT", "No data line for target %s" % target_name
 
         if "|" in line:
-            h, p = line.split("|", 1)
+            h, v = line.split("|", 1)
             h = h.strip()
-            p = p.strip()
+            v = v.strip()
         else:
             h = line.strip()
-            p = None
+            v = None
 
         if not h:
             return None, None, "OEM_BAD_OUTPUT", "Bad output line: %s" % line
 
-        return h, p, None, None
+        # h = host OEM
+        # v = version Oracle
+        return h, v, None, None
 
     except Exception as ex:
         return None, None, "OEM_EXCEPTION", str(ex)
