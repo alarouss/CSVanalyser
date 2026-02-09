@@ -63,7 +63,7 @@ if __name__ == "__main__":
     # ------------------------------------------------
     # 1) OEM host / port
     # ------------------------------------------------
-    host, port, e, d = oem_get_host_and_port(oem_conn, db_name)
+    host, ora_version, e, d = oem_get_host_and_port(oem_conn, db_name)
     if e:
         result["Status"]["ErrorType"] = e
         result["Status"]["ErrorDetail"] = d
