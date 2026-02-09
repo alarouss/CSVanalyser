@@ -71,7 +71,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
     result["OEM"]["Primaire"]["host"] = host
-    result["OEM"]["Primaire"]["port"] = port
+    result["OEM"]["Primaire"]["oracle_version"] = ora_version
 
     # ------------------------------------------------
     # 2) Résolution réseau (CNAME + SCAN)
