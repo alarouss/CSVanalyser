@@ -10,6 +10,7 @@
 # - OEM access will be plugged later
 
 from Lib.database_arc import DatabaseArchitecture
+from Lib.oem_flow import oem_get_database_identity
 
 
 class DatabaseArcFromOEM(object):
@@ -83,3 +84,36 @@ class DatabaseArcFromOEM(object):
         OEM or DGMGRL later.
         """
         pass
+
+
+class DatabaseArcFromOEM(object):
+
+    # ... (le reste inchangé)
+
+    def _resolve_database(self, identity):
+        """
+        Resolve identifier to database anchor.
+        Returns a dict with:
+          - db_name
+          - db_unique_name
+          - role
+        """
+
+        info = oem_get_database_identity(self.oem_conn, identity)
+
+        if not info:
+            raise Exception("Unable to resolve database identity for '%s'" % identity)
+
+        # Expected minimal contract from oem_flow
+        db_name = info.get("db_name")
+        db_unique_name = info.get("db_unique_name")
+        role = info.get("role")
+
+        if not db_unique_name:
+            raise Exception("OEM resolution missing db_unique_name for '%s'" % identity)
+
+        return {
+            "db_name": db_name,
+            "db_unique_name": db_unique_name,
+            "role": role
+        }
