@@ -10,7 +10,6 @@
 # - OEM access will be plugged later
 
 from Lib.database_arc import DatabaseArchitecture
-from Lib.oem_flow import oem_list_instances
 
 
 
@@ -84,10 +83,37 @@ class DatabaseArcFromOEM(object):
 
     def _populate_instances(self, db_info):
         """
-        Fill instances[] with:
-          instance_name, host, cname, version
+        Populate instances[]:
+          - instance_name
+          - host
+          - cname
+          - version
         """
-        pass
+
+        # Lazy import to avoid hard dependency during tests
+        try:
+            from Lib import oem_flow
+        except ImportError:
+            return
+
+        if not hasattr(oem_flow, "oem_list_instances"):
+            # OEM not implemented yet → silently skip
+            return
+
+        db_unique_name = db_info.get("db_unique_name")
+
+        instances = oem_flow.oem_list_instances(self.oem_conn, db_unique_name)
+        if not instances:
+            return
+
+        for inst in instances:
+            self.arc.add_instance(
+                instance_name=inst.get("instance_name"),
+                host=inst.get("host"),
+                cname=inst.get("cname"),
+                version=inst.get("version")
+            )
+
 
     def _populate_rac(self, db_info):
         """
