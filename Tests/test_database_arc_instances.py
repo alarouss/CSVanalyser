@@ -4,6 +4,9 @@ from Lib.database_arc_oem import DatabaseArcFromOEM
 
 
 class DatabaseArcFromOEM_Test(DatabaseArcFromOEM):
+    def __init__(self, oem_conn):
+        DatabaseArcFromOEM.__init__(self, oem_conn)
+
 
     def _resolve_database(self, identity):
         return {
